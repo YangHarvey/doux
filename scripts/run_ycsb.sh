@@ -1,62 +1,46 @@
 #!/bin/bash
+cd ../build
 
-cd ~/build
-
-# YCSB A B D F
 rm -rf *
-cmake ../learned-leveldb -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
+cmake ../../doux -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 make -j
 
-# AR
-for dist in ycsb-a-33-10 ycsb-b-33-10 ycsb-d-33-10 ycsb-f-33-10; do
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches
-    ./read_cold -f /mnt/db/dataset/amazon_reviews.txt -k 16 -v 64 -d /mnt/ssd/db_ar_random -m 7 -u -n 10000 --change_level_load $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 33000000 -i 5 > ../evaluation/ar_llsm_${dist}.txt
-    ./read_cold -f /mnt/db/dataset/amazon_reviews.txt -k 16 -v 64 -d /mnt/ssd/db_ar_random -m 8 -u -n 10000 $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 33000000 -i 5 > ../evaluation/ar_baseline_${dist}.txt
-done
+# WiscKey
+# Insert
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 0 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_insert.txt
+# Update
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 1 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_update.txt
 
-# OSM
-for dist in ycsb-a-20-10 ycsb-b-20-10 ycsb-d-20-10 ycsb-f-20-10; do
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches
-    ./read_cold -f /mnt/db/dataset/osm_ny.txt -k 16 -v 64 -d /mnt/ssd/db_osm_random -m 7 -u -n 10000 --change_level_load $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 20000000 -i 5 > ../evaluation/osm_llsm_${dist}.txt
-    ./read_cold -f /mnt/db/dataset/osm_ny.txt -k 16 -v 64 -d /mnt/ssd/db_osm_random -m 8 -u -n 10000 $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 20000000 -i 5 > ../evaluation/osm_baseline_${dist}.txt
-done
+# Get
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 2 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_get.txt
 
-# Default traces
-for dist in ycsb-a-10-10 ycsb-b-10-10 ycsb-d-10-10 ycsb-f-10-10; do
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches
-    ./read_cold -k 16 -v 64 -d /mnt/ssd/ycsb_default -m 7 -u -n 10000 --change_level_load -i 5 $* --YCSB /mnt/db/ycsb/${dist}.txt > ../evaluation/ycsb_llsm_${dist}.txt
-    ./read_cold -k 16 -v 64 -d /mnt/ssd/ycsb_default -m 8 -u -n 10000 --change_level_load -i 5 $* --YCSB /mnt/db/ycsb/${dist}.txt > ../evaluation/ycsb_baseline_${dist}.txt
-done
+# Scan
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 3 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_scan.txt
 
-# C
-rm -rf *
-cmake ../learned-leveldb -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON
-make -j
+# YCSB-A
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 4 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_ycsb_a.txt
 
-# AR
-for dist in ycsb-c-33-10; do
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches
-    ./read_cold -f /mnt/db/dataset/amazon_reviews.txt -k 16 -v 64 -d /mnt/ssd/db_ar_random -m 7 -u -n 10000 --change_level_load $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 33000000 -i 5 > ../evaluation/ar_llsm_${dist}.txt
-    ./read_cold -f /mnt/db/dataset/amazon_reviews.txt -k 16 -v 64 -d /mnt/ssd/db_ar_random -m 7 -u -n 10000 --change_level_load $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 33000000 -i 5 > ../evaluation/ar_llsm_${dist}.txt
-    ./read_cold -f /mnt/db/dataset/amazon_reviews.txt -k 16 -v 64 -d /mnt/ssd/db_ar_random -m 8 -u -n 10000 $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 33000000 -i 5 > ../evaluation/ar_baseline_${dist}.txt
-done
+# YCSB-B
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 5 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_ycsb_b.txt
 
-# OSM
-for dist in ycsb-c-20-10; do
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches
-    ./read_cold -f /mnt/db/dataset/osm_ny.txt -k 16 -v 64 -d /mnt/ssd/db_osm_random -m 7 -u -n 10000 --change_level_load $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 20000000 -i 5 > ../evaluation/osm_llsm_${dist}.txt
-    ./read_cold -f /mnt/db/dataset/osm_ny.txt -k 16 -v 64 -d /mnt/ssd/db_osm_random -m 7 -u -n 10000 --change_level_load $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 20000000 -i 5 > ../evaluation/osm_llsm_${dist}.txt
-    ./read_cold -f /mnt/db/dataset/osm_ny.txt -k 16 -v 64 -d /mnt/ssd/db_osm_random -m 8 -u -n 10000 $* --YCSB /mnt/db/ycsb/${dist}.txt --insert 20000000 -i 5 > ../evaluation/osm_baseline_${dist}.txt
-done
+# YCSB-C
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 6 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_ycsb_c.txt
 
-# Default traces
-for dist in ycsb-c-10-10; do
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches
-    ./read_cold -k 16 -v 64 -d /mnt/ssd/ycsb_default -m 7 -u -n 10000 --change_level_load -i 5 $* --YCSB /mnt/db/ycsb/${dist}.txt > ../evaluation/ycsb_llsm_${dist}.txt
-    ./read_cold -k 16 -v 64 -d /mnt/ssd/ycsb_default -m 7 -u -n 10000 --change_level_load -i 5 $* --YCSB /mnt/db/ycsb/${dist}.txt > ../evaluation/ycsb_llsm_${dist}.txt
-    ./read_cold -k 16 -v 64 -d /mnt/ssd/ycsb_default -m 8 -u -n 10000 --change_level_load -i 5 $* --YCSB /mnt/db/ycsb/${dist}.txt > ../evaluation/ycsb_baseline_${dist}.txt
-done
+# YCSB-D
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 7 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_ycsb_d.txt
 
-cd ~
-python3 scripts/collect_results.py 4 > evaluation/expr_ycsb.txt
-cat evaluation/expr_ycsb.txt
+# YCSB-E
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 8 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_ycsb_e.txt
+
+# YCSB-F
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
+./ycsb_bench -k 16 -v 64 -w 9 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_ycsb_f.txt
