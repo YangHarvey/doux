@@ -69,7 +69,7 @@ class DBIter : public Iterator {
   virtual Slice value() const {
     assert(valid_);
     Slice vaddr = (direction_ == kForward) ? iter_->value() : saved_value_;
-    if (adgMod::MOD >= 7) {
+    if (adgMod::MOD == 7 || adgMod::MOD == 8) {
 #ifdef INTERNAL_TIMER
       adgMod::Stats* instance = adgMod::Stats::GetInstance();
       instance->StartTimer(12);

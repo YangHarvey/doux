@@ -62,8 +62,12 @@ If you want to run any of the single tests by yourself, please use the applicati
 This is also what we use during the experiments. Some of the important options is listed below.
 For a full option list, please use --help option.
 
--m: running mode. We keep a Wisckey baseline mode inside the library as well for ease of testing.
-    "-m 8" is Wisckey and "-m 7" is our learned LSM system.
+-m: running mode. We keep a LevelDB and WiscKey baseline mode inside the library as well for ease of testing.
+    "-m 0" is LevelDB,
+    "-m 7" is Bourbon,
+    "-m 8" is WiscKey,
+    "-m 9" is DiffKV,
+    "-m 10" is Doux.
 -u: unlimited file descriptor. Baseline Wisckey (and LevelDB) assumes the system allows only
     1024 opened file descriptors for a process at the same time, so it hardcode its file 
     descriptor cache size to this value. We find it affect performance much with limited file 

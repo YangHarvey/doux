@@ -484,7 +484,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       adgMod::LearnedIndexData* model = nullptr;
       bool file_learned = false;
       instance->StartTimer(6);
-      if (adgMod::MOD == 0 || adgMod::MOD == 8) {
+      if (adgMod::MOD == 0 || adgMod::MOD == 8 || adgMod::MOD == 9 || adgMod::MOD == 10) {
         s = vset_->table_cache_->Get(options, f->number, f->file_size, ikey,
                                       &saver, SaveValue, level, f);
       } else {

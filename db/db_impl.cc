@@ -526,16 +526,23 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
+  FileMetaData vmeta;
   meta.number = versions_->NewFileNumber();
+  vmeta.number = meta.number;
   pending_outputs_.insert(meta.number);
   Iterator* iter = mem->NewIterator();
+  Iterator* viter = mem->NewIterator();
   Log(options_.info_log, "Level-0 table #%llu: started",
       (unsigned long long)meta.number);
 
   Status s;
   {
     mutex_.Unlock();
-    s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      s = BuildDuTable(dbname_, env_, options_, table_cache_, iter, &meta, viter, &vmeta);
+    } else {
+      s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+    }
     mutex_.Lock();
   }
 
@@ -543,30 +550,39 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       (unsigned long long)meta.number, (unsigned long long)meta.file_size,
       s.ToString().c_str());
   delete iter;
+  delete viter;
   pending_outputs_.erase(meta.number);
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
   int level = 0;
+  int vlevel = 0;
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
+      vlevel = level;
     }
     edit->AddFile(level, meta.number, meta.file_size, meta.smallest,
                   meta.largest);
+    edit->AddVFile(vlevel, vmeta.number, vmeta.file_size, vmeta.smallest,
+                   vmeta.largest);
 
     if (!adgMod::fresh_write) {
-        adgMod::file_stats_mutex.Lock();
-        assert(adgMod::file_stats.find(meta.number) == adgMod::file_stats.end());
-        adgMod::file_stats.insert({meta.number, adgMod::FileStats(level, meta.file_size)});
-        adgMod::file_stats_mutex.Unlock();
+      adgMod::file_stats_mutex.Lock();
+      assert(adgMod::file_stats.find(meta.number) == adgMod::file_stats.end());
+      adgMod::file_stats.insert({meta.number, adgMod::FileStats(level, meta.file_size)});
+      adgMod::file_stats_mutex.Unlock();
+
+      adgMod::vfile_stats_mutex.Lock();
+      assert(adgMod::vfile_stats.find(vmeta.number) == adgMod::vfile_stats.end());
+      adgMod::vfile_stats.insert({vmeta.number, adgMod::FileStats(level, vmeta.file_size)});
+      adgMod::vfile_stats_mutex.Unlock();
     }
 
 
   } else return Status::NotFound("Empty");
-
 
 
   CompactionStats stats;
@@ -578,11 +594,11 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
 int DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
-//  assert(false);
+  //  assert(false);
   assert(imm_ != nullptr);
 
-    adgMod::Stats* instance = adgMod::Stats::GetInstance();
-    instance->StartTimer(16);
+  adgMod::Stats* instance = adgMod::Stats::GetInstance();
+  instance->StartTimer(16);
 
   // Save the contents of the memtable as a new Table
   VersionEdit edit;
@@ -612,16 +628,14 @@ int DBImpl::CompactMemTable() {
     RecordBackgroundError(s);
   }
 
-    auto time = instance->PauseTimer(16, true);
-    int level = edit.new_files_[0].first;
-    adgMod::compaction_counter_mutex.Lock();
-    adgMod::events[0].push_back(new CompactionEvent(time, to_string(level)));
-    adgMod::levelled_counters[5].Increment(edit.new_files_[0].first, time.second - time.first);
-    adgMod::compaction_counter_mutex.Unlock();
+  auto time = instance->PauseTimer(16, true);
+  int level = edit.new_files_[0].first;
+  adgMod::compaction_counter_mutex.Lock();
+  adgMod::events[0].push_back(new CompactionEvent(time, to_string(level)));
+  adgMod::levelled_counters[5].Increment(edit.new_files_[0].first, time.second - time.first);
+  adgMod::compaction_counter_mutex.Unlock();
 
-    env_->PrepareLearning(time.second, level, new FileMetaData(edit.new_files_[0].second));
-
-
+  env_->PrepareLearning(time.second, level, new FileMetaData(edit.new_files_[0].second));
 
   return level;
 }
@@ -846,28 +860,25 @@ void DBImpl::BackgroundCompaction() {
 
 
     if (c != nullptr) {
-        std::set<int> changed_level;
-        for (auto& item: c->edit()->deleted_files_) {
-            changed_level.insert(item.first);
-        }
-        for (auto& item: c->edit()->new_files_) {
-            changed_level.insert(item.first);
-        }
+      std::set<int> changed_level;
+      for (auto& item: c->edit()->deleted_files_) {
+          changed_level.insert(item.first);
+      }
+      for (auto& item: c->edit()->new_files_) {
+          changed_level.insert(item.first);
+      }
 
-        string changed_level_string;
+      string changed_level_string;
 
-        auto time = instance->PauseTimer(7, true);
+      auto time = instance->PauseTimer(7, true);
 
-        adgMod::compaction_counter_mutex.Lock();
-        for (auto item: changed_level) {
-            changed_level_string += to_string(item);
-            adgMod::levelled_counters[5].Increment(item, time.second - time.first);
-        }
-        adgMod::events[0].push_back(new CompactionEvent(time, std::move(changed_level_string)));
-        adgMod::compaction_counter_mutex.Unlock();
-
-
-
+      adgMod::compaction_counter_mutex.Lock();
+      for (auto item: changed_level) {
+          changed_level_string += to_string(item);
+          adgMod::levelled_counters[5].Increment(item, time.second - time.first);
+      }
+      adgMod::events[0].push_back(new CompactionEvent(time, std::move(changed_level_string)));
+      adgMod::compaction_counter_mutex.Unlock();
     } else {
         instance->PauseTimer(7);
     }
@@ -1269,8 +1280,6 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 
   adgMod::Stats* instance = adgMod::Stats::GetInstance();
 
-
-
   Status s;
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
@@ -1290,8 +1299,6 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 
   bool have_stat_update = false;
   Version::GetStats stats;
-
-
 
   // Unlock while reading from files and memtables
   {
@@ -1324,7 +1331,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         s = current->Get(options, lkey, value, &stats);
     }
 
-    if (adgMod::MOD >= 7 && s.ok()) {
+    if ((adgMod::MOD == 7 || adgMod::MOD == 8)  && s.ok()) {
 #ifdef INTERNAL_TIMER
         instance->StartTimer(12);
 #endif
@@ -1379,15 +1386,16 @@ void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
 
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  if (adgMod::MOD >= 7) {
+  if (adgMod::MOD <= 6 || adgMod::MOD >= 9) {
+    return DB::Put(o, key, val);
+  } else {
+    // adgMod::MOD == 7 (Bourbon) || adgMod::MOD == 8 (WiscKey)
     uint64_t value_address = adgMod::db->vlog->AddRecord(key, val);
     char buffer[sizeof(uint64_t) + sizeof(uint32_t)];
     EncodeFixed64(buffer, value_address);
     EncodeFixed32(buffer + sizeof(uint64_t), val.size());
     return DB::Put(o, key, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
-  } else {
-    return DB::Put(o, key, val);
-  }
+  } 
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
@@ -1424,27 +1432,27 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     // into mem_.
     {
       mutex_.Unlock();
-      if (adgMod::MOD < 7) {
-          status = log_->AddRecord(WriteBatchInternal::Contents(updates));
-          bool sync_error = false;
-          if (status.ok() && options.sync) {
-              status = logfile_->Sync();
-              if (!status.ok()) {
-                  sync_error = true;
-              }
+      if (adgMod::MOD <= 6 || adgMod::MOD >= 9) {
+        status = log_->AddRecord(WriteBatchInternal::Contents(updates));
+        bool sync_error = false;
+        if (status.ok() && options.sync) {
+          status = logfile_->Sync();
+          if (!status.ok()) {
+            sync_error = true;
           }
+        }
       }
 
       if (status.ok()) {
         status = WriteBatchInternal::InsertInto(updates, mem_);
       }
       mutex_.Lock();
-//      if (sync_error) {
-//        // The state of the log file is indeterminate: the log record we
-//        // just added may or may not show up when the DB is re-opened.
-//        // So we force the DB into a mode where all future writes fail.
-//        RecordBackgroundError(status);
-//      }
+      // if (sync_error) {
+      //   // The state of the log file is indeterminate: the log record we
+      //   // just added may or may not show up when the DB is re-opened.
+      //   // So we force the DB into a mode where all future writes fail.
+      //   RecordBackgroundError(status);
+      // }
     }
     if (updates == tmp_batch_) tmp_batch_->Clear();
 

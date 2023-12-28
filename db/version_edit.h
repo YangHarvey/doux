@@ -75,6 +75,16 @@ class VersionEdit {
     new_files_.push_back(std::make_pair(level, f));
   }
 
+  void AddVFile(int level, uint64_t file, uint64_t file_size,
+               const InternalKey& smallest, const InternalKey& largest) {
+    FileMetaData f;
+    f.number = file;
+    f.file_size = file_size;
+    f.smallest = smallest;
+    f.largest = largest;
+    new_vfiles_.push_back(std::make_pair(level, f));
+  }
+
   // Delete the specified "file" from the specified "level".
   void DeleteFile(int level, uint64_t file) {
     deleted_files_.insert(std::make_pair(level, file));
@@ -105,6 +115,7 @@ class VersionEdit {
   std::vector<std::pair<int, InternalKey> > compact_pointers_;
   DeletedFileSet deleted_files_;
   std::vector<std::pair<int, FileMetaData> > new_files_;
+  std::vector<std::pair<int, FileMetaData> > new_vfiles_;
 };
 
 }  // namespace leveldb

@@ -55,6 +55,8 @@ namespace adgMod {
     leveldb::port::Mutex learn_counter_mutex;
     leveldb::port::Mutex file_stats_mutex;
     map<int, FileStats> file_stats;
+    leveldb::port::Mutex vfile_stats_mutex;
+    map<int, FileStats> vfile_stats;
 
     uint64_t ExtractInteger(const char* pos, size_t size) {
         char* temp = new char[size + 1];

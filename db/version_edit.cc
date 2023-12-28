@@ -36,6 +36,7 @@ void VersionEdit::Clear() {
   has_last_sequence_ = false;
   deleted_files_.clear();
   new_files_.clear();
+  new_vfiles_.clear();
 }
 
 void VersionEdit::EncodeTo(std::string* dst) const {
@@ -77,6 +78,16 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     const FileMetaData& f = new_files_[i].second;
     PutVarint32(dst, kNewFile);
     PutVarint32(dst, new_files_[i].first);  // level
+    PutVarint64(dst, f.number);
+    PutVarint64(dst, f.file_size);
+    PutLengthPrefixedSlice(dst, f.smallest.Encode());
+    PutLengthPrefixedSlice(dst, f.largest.Encode());
+  }
+
+  for (size_t i = 0; i < new_vfiles_.size(); i++) {
+    const FileMetaData& f = new_vfiles_[i].second;
+    PutVarint32(dst, kNewFile);
+    PutVarint32(dst, new_vfiles_[i].first);  // level
     PutVarint64(dst, f.number);
     PutVarint64(dst, f.file_size);
     PutLengthPrefixedSlice(dst, f.smallest.Encode());
@@ -182,6 +193,9 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
+          if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+            new_vfiles_.push_back(std::make_pair(level, f));
+          }
         } else {
           msg = "new-file entry";
         }
@@ -244,6 +258,19 @@ std::string VersionEdit::DebugString() const {
     const FileMetaData& f = new_files_[i].second;
     r.append("\n  AddFile: ");
     AppendNumberTo(&r, new_files_[i].first);
+    r.append(" ");
+    AppendNumberTo(&r, f.number);
+    r.append(" ");
+    AppendNumberTo(&r, f.file_size);
+    r.append(" ");
+    r.append(f.smallest.DebugString());
+    r.append(" .. ");
+    r.append(f.largest.DebugString());
+  }
+  for (size_t i = 0; i < new_vfiles_.size(); i++) {
+    const FileMetaData& f = new_vfiles_[i].second;
+    r.append("\n  AddFile: ");
+    AppendNumberTo(&r, new_vfiles_[i].first);
     r.append(" ");
     AppendNumberTo(&r, f.number);
     r.append(" ");

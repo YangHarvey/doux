@@ -9,6 +9,7 @@ make -j
 # Insert
 ./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
 ./ycsb_bench -k 16 -v 64 -w 0 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_insert.txt
+
 # Update
 ./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_init.txt
 ./ycsb_bench -k 16 -v 64 -w 1 -d /mnt/doux/ycsb_wisckey -m 8 -t 3 > ../evaluation/ycsb_wisckey_update.txt

@@ -73,6 +73,8 @@ namespace adgMod {
     extern leveldb::port::Mutex learn_counter_mutex;
     extern leveldb::port::Mutex file_stats_mutex;
     extern map<int, FileStats> file_stats;
+    extern leveldb::port::Mutex vfile_stats_mutex;
+    extern map<int, FileStats> vfile_stats;
 
 
 

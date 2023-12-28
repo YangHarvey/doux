@@ -24,6 +24,9 @@ class VersionEdit;
 // zero, and no Table file will be produced.
 Status BuildTable(const std::string& dbname, Env* env, const Options& options,
                   TableCache* table_cache, Iterator* iter, FileMetaData* meta);
+Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
+                    TableCache* table_cache, Iterator* iter, FileMetaData* meta,
+                    Iterator* viter, FileMetaData* vmeta);
 
 }  // namespace leveldb
 
