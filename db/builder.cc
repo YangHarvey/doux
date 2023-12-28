@@ -76,11 +76,6 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
   return s;
 }
 
-string BuildValue(string value) {
-  string result = string(adgMod::value_size - value.length(), '0') + value;
-  return std::move(result);
-}
-
 Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
                     TableCache* table_cache, Iterator* iter, FileMetaData* meta,
                     Iterator* viter, FileMetaData* vmeta) {
@@ -161,7 +156,10 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
       meta->largest.DecodeFrom(key);
-      builder->Add(key, BuildValue(vfname));
+      char buffer[sizeof(uint64_t) + sizeof(uint64_t)];
+      EncodeFixed64(buffer, vmeta->number);
+      EncodeFixed64(buffer + sizeof(uint64_t), vmeta->file_size);
+      builder->Add(key, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint64_t)});
     }
 
     // Finish and check for builder errors

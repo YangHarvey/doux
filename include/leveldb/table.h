@@ -86,6 +86,7 @@ class LEVELDB_EXPORT Table {
 
   explicit Table(Rep* rep) : rep_(rep) {}
 
+public:
   // Calls (*handle_result)(arg, ...) with the entry found after a call
   // to Seek(key).  May not make such a call if filter policy says
   // that key is not present.
@@ -93,6 +94,7 @@ class LEVELDB_EXPORT Table {
                      void (*handle_result)(void* arg, const Slice& k, const Slice& v), int level,
                      FileMetaData* meta = nullptr, uint64_t lower = 0, uint64_t upper = 0, bool learned = false, Version* version = nullptr);
 
+private:
   void ReadMeta(const Footer& footer);
   void ReadFilter(const Slice& filter_handle_value);
 

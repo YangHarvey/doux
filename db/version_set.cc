@@ -547,6 +547,36 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   return Status::NotFound(Slice());  // Use an empty error message for speed
 }
 
+Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, std::string* val,
+                             uint64_t file_number, uint64_t file_size, GetStats* stats) {
+  Status s;
+  Slice ikey = key.internal_key();
+  Slice user_key = key.user_key();
+  const Comparator* ucmp = vset_->icmp_.user_comparator();
+
+  Saver saver;
+  saver.state = kNotFound;
+  saver.ucmp = ucmp;
+  saver.user_key = user_key;
+  saver.value = val;
+
+  if (vtables_.find(file_number) == vtables_.end()) {
+    std::string vfname = VTableFileName(vset_->dbname_, file_number);
+    RandomAccessFile* file = nullptr;
+    Table* table = nullptr;
+    s = vset_->env_->NewRandomAccessFile(vfname, &file);
+    if (s.ok()) {
+      s = Table::Open(*(vset_->options_), file, file_size, &table);
+      vtables_[file_number] = table;
+      s = table->InternalGet(options, ikey, &saver, SaveValue, 0);
+    }
+  } else {
+    s = vtables_[file_number]->InternalGet(options, ikey, &saver, SaveValue, 0);
+  }
+
+  return s;
+}
+
 bool Version::UpdateStats(const GetStats& stats) {
   FileMetaData* f = stats.seek_file;
   if (f != nullptr) {

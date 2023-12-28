@@ -18,9 +18,11 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <unordered_map>
 
 #include "db/dbformat.h"
 #include "db/version_edit.h"
+#include "leveldb/table.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
 
@@ -75,6 +77,9 @@ class Version {
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
+  Status GetFromVFile(const ReadOptions&, const LookupKey& key, std::string* val,
+                      uint64_t file_number, uint64_t file_size, GetStats* stats);
+  
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
@@ -178,6 +183,7 @@ class Version {
 public:
   std::vector<std::shared_ptr<adgMod::LearnedIndexData>> learned_index_data_;
   std::map<int, std::shared_ptr<adgMod::LearnedIndexData>> file_learned_index_data_;
+  std::unordered_map<uint64_t, Table*> vtables_;
 };
 
 class VersionSet {

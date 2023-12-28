@@ -1331,13 +1331,24 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         s = current->Get(options, lkey, value, &stats);
     }
 
-    if ((adgMod::MOD == 7 || adgMod::MOD == 8)  && s.ok()) {
+    if ((adgMod::MOD == 7 || adgMod::MOD == 8) && s.ok()) {
 #ifdef INTERNAL_TIMER
         instance->StartTimer(12);
 #endif
         uint64_t value_address = DecodeFixed64(value->c_str());
         uint32_t value_size = DecodeFixed32(value->c_str() + sizeof(uint64_t));
         *value = std::move(vlog->ReadRecord(value_address, value_size));
+#ifdef INTERNAL_TIMER
+        instance->PauseTimer(12);
+#endif
+    } else if ((adgMod::MOD == 9 || adgMod::MOD == 10) && s.ok()) {
+#ifdef INTERNAL_TIMER
+        instance->StartTimer(12);
+#endif
+        uint64_t value_address = DecodeFixed64(value->c_str());
+        uint64_t file_size = DecodeFixed64(value->c_str() + sizeof(uint64_t));
+        s = current->GetFromVFile(options, lkey, value, value_address, file_size, &stats);
+        
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);
 #endif

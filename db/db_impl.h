@@ -81,9 +81,6 @@ class DBImpl : public DB {
   std::atomic<int> version_count;
   adgMod::VLog* vlog;
 
-
-
-
 private:
   friend class DB;
   friend class TableCache;

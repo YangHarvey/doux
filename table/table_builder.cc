@@ -46,6 +46,7 @@ struct TableBuilder::Rep {
   int64_t num_entries;
   bool closed;  // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
+  uint64_t cur_offset;
 
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
