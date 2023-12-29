@@ -214,6 +214,8 @@ target_sources(leveldb
     "${PROJECT_SOURCE_DIR}/mod/event.h"
     "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.cpp"
     "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/util.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/encoding.h"
 
   # Only CMake 3.3+ supports PUBLIC sources in targets exported by "install".
   $<$<VERSION_GREATER:CMAKE_VERSION,3.2>:PUBLIC>

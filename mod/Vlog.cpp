@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/03/23.
-//
-
 #include <fcntl.h>
 #include <sys/stat.h>
 #include "Vlog.h"

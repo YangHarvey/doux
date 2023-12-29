@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/03/23.
-//
-
 #ifndef LEVELDB_VLOG_H
 #define LEVELDB_VLOG_H
 

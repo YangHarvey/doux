@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/04/25.
-//
-
 #include <iostream>
 #include "event.h"
 

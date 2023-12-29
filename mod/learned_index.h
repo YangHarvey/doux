@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/02/02.
-//
-
 #ifndef LEVELDB_LEARNED_INDEX_H
 #define LEVELDB_LEARNED_INDEX_H
 

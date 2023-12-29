@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/02/02.
-//
-
 #include <util/mutexlock.h>
 #include "util.h"
 #include "learned_index.h"

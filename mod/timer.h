@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/02/02.
-//
-
 #ifndef LEVELDB_TIMER_H
 #define LEVELDB_TIMER_H
 

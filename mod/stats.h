@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2019/09/30.
-//
-
 #ifndef LEVELDB_STATS_H
 #define LEVELDB_STATS_H
 
