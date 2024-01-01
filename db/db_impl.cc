@@ -525,6 +525,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
+  Arena arena;
   FileMetaData meta;
   FileMetaData vmeta;
   meta.number = versions_->NewFileNumber();
@@ -539,7 +540,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     mutex_.Unlock();
     if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-      s = BuildDuTable(dbname_, env_, options_, table_cache_, iter, &meta, viter, &vmeta);
+      s = BuildDuTable(dbname_, env_, options_, table_cache_, iter, &meta, viter, &vmeta, &arena);
     } else {
       s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     }
@@ -1344,10 +1345,13 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     } else if ((adgMod::MOD == 9 || adgMod::MOD == 10) && s.ok()) {
 #ifdef INTERNAL_TIMER
         instance->StartTimer(12);
-#endif
-        uint64_t value_address = DecodeFixed64(value->c_str());
-        uint64_t file_size = DecodeFixed64(value->c_str() + sizeof(uint64_t));
-        s = current->GetFromVFile(options, lkey, value, value_address, file_size, &stats);
+#endif  
+        uint32_t file_number = DecodeFixed32(value->c_str());
+        uint32_t file_size = DecodeFixed32(value->c_str() + sizeof(uint32_t));
+        uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
+        uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 3);
+        s = current->GetFromVFile(options, lkey, value, file_number, file_size,
+                                  block_number, block_offset, &stats);
         
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);

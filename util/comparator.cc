@@ -70,4 +70,42 @@ const Comparator* BytewiseComparator() {
   return singleton.get();
 }
 
+class VKeyComparatorImpl : public Comparator {
+ public:
+  VKeyComparatorImpl() {}
+
+  virtual const char* Name() const { return "leveldb.VKeyComparator"; }
+
+  virtual int Compare(const Slice& key1, const Slice& key2) const {
+    int sz1 = key1.size(), sz2 = key2.size();
+    const Slice skey1(key1.data() + sz1 - 8, 8);
+    const Slice skey2(key2.data() + sz2 - 8, 8);
+    int r = skey1.compare(skey2);
+    if (r == 0) {
+      const Slice ukey1(key1.data(), sz1 - 16);
+      const Slice ukey2(key2.data(), sz2 - 16);
+      r = ukey2.compare(ukey2);
+      if (r == 0) {
+        const uint64_t num1 = DecodeFixed64(key1.data() + sz1 - 16);
+        const uint64_t num2 = DecodeFixed64(key2.data() + sz2 - 16);
+        if (num1 > num2) {
+          r = -1;
+        } else if (num1 < num2) {
+          r = +1;
+        }
+      }
+    }
+    return r;
+  }
+
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const { return; }
+
+  virtual void FindShortSuccessor(std::string* key) const { return; }
+};
+
+const Comparator* VKeyComparator() {
+  static NoDestructor<VKeyComparatorImpl> singleton;
+  return singleton.get();
+}
+
 }  // namespace leveldb

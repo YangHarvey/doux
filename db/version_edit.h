@@ -5,6 +5,7 @@
 #ifndef STORAGE_LEVELDB_DB_VERSION_EDIT_H_
 #define STORAGE_LEVELDB_DB_VERSION_EDIT_H_
 
+#include <iostream>
 #include <set>
 #include <utility>
 #include <vector>
@@ -73,6 +74,7 @@ class VersionEdit {
     f.smallest = smallest;
     f.largest = largest;
     new_files_.push_back(std::make_pair(level, f));
+    // std::cout << "AddFile: {number: " << f.number << ", file_size: " << f.file_size << "}" << std::endl;
   }
 
   void AddVFile(int level, uint64_t file, uint64_t file_size,

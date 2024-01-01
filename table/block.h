@@ -219,6 +219,13 @@ public:
         ParseNextKey();
     }
 
+    virtual void SeekToNth(uint32_t offset) {
+        while (offset > 0 && NextEntryOffset() < restarts_) {
+            ParseNextKey();
+            --offset;
+        }
+    }
+
     virtual void SeekToLast() {
         SeekToRestartPoint(num_restarts_ - 1);
         while (ParseNextKey() && NextEntryOffset() < restarts_) {

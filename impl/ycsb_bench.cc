@@ -151,6 +151,8 @@ int main(int argc, char *argv[]) {
     num_entries *= num_pairs_base;
     num_operations *= num_pairs_base;
 
+    adgMod::fd_limit = unlimit_fd ? 1024 * 1024 : 1024;
+
     vector<string> keys;
     // keys: [0, num_entries - 1]
     for (uint64_t i = 0; i < num_entries; ++i) {

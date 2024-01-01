@@ -276,10 +276,26 @@ struct Saver {
   std::string* value;
 };
 }  // namespace
+
 static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   Saver* s = reinterpret_cast<Saver*>(arg);
   ParsedInternalKey parsed_key;
   if (!ParseInternalKey(ikey, &parsed_key)) {
+    s->state = kCorrupt;
+  } else {
+    if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
+      s->state = (parsed_key.type == kTypeValue) ? kFound : kDeleted;
+      if (s->state == kFound) {
+        s->value->assign(v.data(), v.size());
+      }
+    }
+  }
+}
+
+static void SaveValueV2(void* arg, const Slice& ikey, const Slice& v) {
+  Saver* s = reinterpret_cast<Saver*>(arg);
+  ParsedInternalKey parsed_key;
+  if (!ParseInternalVKey(ikey, &parsed_key)) {
     s->state = kCorrupt;
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
@@ -548,7 +564,8 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
 }
 
 Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, std::string* val,
-                             uint64_t file_number, uint64_t file_size, GetStats* stats) {
+                             uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                             uint32_t block_offset, GetStats* stats) {
   Status s;
   Slice ikey = key.internal_key();
   Slice user_key = key.user_key();
@@ -568,10 +585,10 @@ Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, s
     if (s.ok()) {
       s = Table::Open(*(vset_->options_), file, file_size, &table);
       vtables_[file_number] = table;
-      s = table->InternalGet(options, ikey, &saver, SaveValue, 0);
+      s = table->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
     }
   } else {
-    s = vtables_[file_number]->InternalGet(options, ikey, &saver, SaveValue, 0);
+    s = vtables_[file_number]->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
   }
 
   return s;

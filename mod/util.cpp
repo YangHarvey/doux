@@ -22,7 +22,7 @@ namespace adgMod {
     leveldb::WriteOptions write_options;
     FileLearnedIndexData* file_data = nullptr;
     CBModel_Learn* learn_cb_model = nullptr;
-    uint64_t fd_limit;
+    uint64_t fd_limit = 1024;
     bool use_filter = false;
     bool restart_read = false;
     bool fresh_write = false;

@@ -6,6 +6,8 @@
 #define STORAGE_LEVELDB_DB_BUILDER_H_
 
 #include "leveldb/status.h"
+#include "util/arena.h"
+#include "impl/zorder/encoding.h"
 
 namespace leveldb {
 
@@ -17,6 +19,14 @@ class Iterator;
 class TableCache;
 class VersionEdit;
 
+struct VInfo {
+    Slice value;
+    uint32_t file_number;
+    uint32_t file_size;
+    uint32_t block_number;
+    uint32_t block_offset;
+};
+
 // Build a Table file from the contents of *iter.  The generated file
 // will be named according to meta->number.  On success, the rest of
 // *meta will be filled with metadata about the generated table.
@@ -26,7 +36,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
                   TableCache* table_cache, Iterator* iter, FileMetaData* meta);
 Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
                     TableCache* table_cache, Iterator* iter, FileMetaData* meta,
-                    Iterator* viter, FileMetaData* vmeta);
+                    Iterator* viter, FileMetaData* vmeta, Arena* arena);
 
 }  // namespace leveldb
 

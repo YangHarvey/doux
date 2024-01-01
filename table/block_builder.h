@@ -38,14 +38,17 @@ class BlockBuilder {
   // we are building.
   size_t CurrentSizeEstimate() const;
 
+  uint32_t BlockOffset() const;
+
   // Return true iff no entries have been added since the last Reset()
   bool empty() const { return buffer_.empty(); }
 
- private:
+ public:
   const Options* options_;
   std::string buffer_;              // Destination buffer
   std::vector<uint32_t> restarts_;  // Restart points
   int counter_;                     // Number of entries emitted since restart
+  uint32_t num_entries_;            // Total number of existing entries
   bool finished_;                   // Has Finish() been called?
   std::string last_key_;
 };

@@ -26,6 +26,7 @@ struct TableBuilder::Rep {
         offset(0),
         data_block(&options),
         index_block(&index_block_options),
+        block_number(0),
         num_entries(0),
         closed(false),
         filter_block(opt.filter_policy == nullptr
@@ -42,11 +43,11 @@ struct TableBuilder::Rep {
   Status status;
   BlockBuilder data_block;
   BlockBuilder index_block;
+  uint32_t block_number;
   std::string last_key;
   int64_t num_entries;
   bool closed;  // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
-  uint64_t cur_offset;
 
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
@@ -132,6 +133,7 @@ void TableBuilder::Flush() {
   WriteBlock(&r->data_block, &r->pending_handle);
   if (ok()) {
     r->pending_index_entry = true;
+    r->block_number += 1;
     r->status = r->file->Flush();
   }
   if (r->filter_block != nullptr) {
@@ -262,5 +264,9 @@ void TableBuilder::Abandon() {
 uint64_t TableBuilder::NumEntries() const { return rep_->num_entries; }
 
 uint64_t TableBuilder::FileSize() const { return rep_->offset; }
+
+uint32_t TableBuilder::BlockNumber() const { return rep_->block_number; }
+
+uint32_t TableBuilder::BlockOffset() const { return rep_->data_block.BlockOffset(); }
 
 }  // namespace leveldb

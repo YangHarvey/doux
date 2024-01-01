@@ -8,6 +8,7 @@
 #include <string>
 
 #include "leveldb/export.h"
+#include "util/coding.h"
 
 namespace leveldb {
 
@@ -58,6 +59,8 @@ class LEVELDB_EXPORT Comparator {
 // ordering.  The result remains the property of this module and
 // must not be deleted.
 LEVELDB_EXPORT const Comparator* BytewiseComparator();
+
+LEVELDB_EXPORT const Comparator* VKeyComparator();
 
 }  // namespace leveldb
 

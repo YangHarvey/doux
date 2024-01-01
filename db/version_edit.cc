@@ -20,7 +20,8 @@ enum Tag {
   kDeletedFile = 6,
   kNewFile = 7,
   // 8 was used for large value refs
-  kPrevLogNumber = 9
+  kPrevLogNumber = 9,
+  kNewVFile = 10
 };
 
 void VersionEdit::Clear() {
@@ -86,7 +87,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
 
   for (size_t i = 0; i < new_vfiles_.size(); i++) {
     const FileMetaData& f = new_vfiles_[i].second;
-    PutVarint32(dst, kNewFile);
+    PutVarint32(dst, kNewVFile);
     PutVarint32(dst, new_vfiles_[i].first);  // level
     PutVarint64(dst, f.number);
     PutVarint64(dst, f.file_size);
@@ -193,11 +194,19 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
-          if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-            new_vfiles_.push_back(std::make_pair(level, f));
-          }
         } else {
           msg = "new-file entry";
+        }
+        break;
+
+      case kNewVFile:
+        if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) &&
+            GetInternalKey(&input, &f.smallest) &&
+            GetInternalKey(&input, &f.largest)) {
+          new_vfiles_.push_back(std::make_pair(level, f));
+        } else {
+          msg = "new-vfile entry";
         }
         break;
 

@@ -49,13 +49,13 @@ make -j
 
 # Doux
 # Insert
-./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_doux -m 8 -t 3 > ../evaluation/ycsb_doux_init.txt
-./ycsb_bench -k 16 -v 64 -w 0 -d /mnt/doux/ycsb_doux -m 8 -t 3 > ../evaluation/ycsb_doux_insert.txt
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_doux -m 10 -t 3 > ../evaluation/ycsb_doux_init.txt
+./ycsb_bench -k 16 -v 64 -w 0 -d /mnt/doux/ycsb_doux -m 10 -t 3 > ../evaluation/ycsb_doux_insert.txt
 
 # Update
-./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_doux -m 8 -t 3 > ../evaluation/ycsb_doux_init.txt
-./ycsb_bench -k 16 -v 64 -w 1 -d /mnt/doux/ycsb_doux -m 8 -t 3 > ../evaluation/ycsb_doux_update.txt
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_doux -m 10 -t 3 > ../evaluation/ycsb_doux_init.txt
+./ycsb_bench -k 16 -v 64 -w 1 -d /mnt/doux/ycsb_doux -m 10 -t 3 > ../evaluation/ycsb_doux_update.txt
 
 # Get
-./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_doux -m 8 -t 3 > ../evaluation/ycsb_doux_init.txt
-./ycsb_bench -k 16 -v 64 -w 2 -d /mnt/doux/ycsb_doux -m 8 -t 3 > ../evaluation/ycsb_doux_get.txt
+./ycsb_bench -k 16 -v 64 --init_db -d /mnt/doux/ycsb_doux -m 10 -t 3 > ../evaluation/ycsb_doux_init.txt
+./ycsb_bench -k 16 -v 64 -w 2 -d /mnt/doux/ycsb_doux -m 10 -t 3 > ../evaluation/ycsb_doux_get.txt

@@ -78,7 +78,9 @@ class Version {
              GetStats* stats);
 
   Status GetFromVFile(const ReadOptions&, const LookupKey& key, std::string* val,
-                      uint64_t file_number, uint64_t file_size, GetStats* stats);
+                      uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                      uint32_t block_offset, GetStats* stats);
+
   
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.

@@ -221,55 +221,102 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
 
 
 #ifdef INTERNAL_TIMER
-    instance->StartTimer(2);
+  instance->StartTimer(2);
 #endif
-    iiter->Seek(k);
+  iiter->Seek(k);
 #ifdef INTERNAL_TIMER
-    instance->PauseTimer(2);
+  instance->PauseTimer(2);
 #endif
 
-    if (iiter->Valid()) {
+  if (iiter->Valid()) {
 #ifdef INTERNAL_TIMER
-      instance->StartTimer(15);
+    instance->StartTimer(15);
 #endif
-      Slice handle_value = iiter->value();
-      FilterBlockReader* filter = rep_->filter;
-      BlockHandle handle;
-      if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
-          !filter->KeyMayMatch(handle.offset(), k)) {
+    Slice handle_value = iiter->value();
+    FilterBlockReader* filter = rep_->filter;
+    BlockHandle handle;
+    if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
+        !filter->KeyMayMatch(handle.offset(), k)) {
 
 #ifdef INTERNAL_TIMER
-        auto time = instance->PauseTimer(15, true);
-        adgMod::levelled_counters[9].Increment(level, time.second - time.first);
+      auto time = instance->PauseTimer(15, true);
+      adgMod::levelled_counters[9].Increment(level, time.second - time.first);
 #endif
-        // Not found
-      } else {
+      // Not found
+    } else {
 #ifdef INTERNAL_TIMER
-        auto time = instance->PauseTimer(15, true);
-        adgMod::levelled_counters[9].Increment(level, time.second - time.first);
-        instance->StartTimer(5);
+      auto time = instance->PauseTimer(15, true);
+      adgMod::levelled_counters[9].Increment(level, time.second - time.first);
+      instance->StartTimer(5);
 #endif
-        Iterator* block_iter = BlockReader(this, options, iiter->value());
+      Iterator* block_iter = BlockReader(this, options, iiter->value());
 #ifdef INTERNAL_TIMER
-        instance->PauseTimer(5);
-        instance->StartTimer(3);
+      instance->PauseTimer(5);
+      instance->StartTimer(3);
 #endif
-        block_iter->Seek(k);
+      block_iter->Seek(k);
 #ifdef INTERNAL_TIMER
-        instance->PauseTimer(3);
+      instance->PauseTimer(3);
 #endif
-        if (block_iter->Valid()) {
-          (*handle_result)(arg, block_iter->key(), block_iter->value());
-        }
-        s = block_iter->status();
-        delete block_iter;
+      if (block_iter->Valid()) {
+        (*handle_result)(arg, block_iter->key(), block_iter->value());
       }
+      s = block_iter->status();
+      delete block_iter;
     }
-    if (s.ok()) {
-      s = iiter->status();
-    }
-    delete iiter;
-    return s;
+  }
+  if (s.ok()) {
+    s = iiter->status();
+  }
+  delete iiter;
+  return s;
+}
+
+Status Table::InternalVGet(const ReadOptions& options, const Slice& k, void* arg,
+                           void (*handle_result)(void*, const Slice&, const Slice&),
+                           uint32_t block_number, uint32_t block_offset) {
+  adgMod::Stats* instance = adgMod::Stats::GetInstance();
+  Status s;
+  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+  ParsedInternalKey parsed_vkey;
+  ParseInternalVKey(k, &parsed_vkey);
+
+#ifdef INTERNAL_TIMER
+  instance->StartTimer(2);
+#endif
+  iiter->SeekToFirst();
+  for (uint32_t i = 0; i < block_number; ++i) {
+    iiter->Next();
+  }
+#ifdef INTERNAL_TIMER
+  instance->PauseTimer(2);
+#endif
+
+  if (iiter->Valid()) {
+#ifdef INTERNAL_TIMER
+      instance->StartTimer(5);
+#endif
+      Iterator* block_iter = BlockReader(this, options, iiter->value());
+#ifdef INTERNAL_TIMER
+      instance->PauseTimer(5);
+      instance->StartTimer(3);
+#endif
+      block_iter->SeekToNth(block_offset);
+#ifdef INTERNAL_TIMER
+      instance->PauseTimer(3);
+#endif
+      if (block_iter->Valid()) {
+        (*handle_result)(arg, block_iter->key(), block_iter->value());
+      }
+      s = block_iter->status();
+      delete block_iter;
+  }
+  
+  if (s.ok()) {
+    s = iiter->status();
+  }
+  delete iiter;
+  return s;
 }
 
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {

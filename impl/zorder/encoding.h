@@ -7,9 +7,9 @@
 #include <array>
 #include <tuple>
 
-#include "util.h"
 #include "leveldb/slice.h"
 #include "leveldb/comparator.h"
+#include "impl/zorder/util.h"
 
 namespace doux {
 template<uint32_t Dimension, uint32_t BitsPerDimension>
@@ -92,19 +92,6 @@ struct MortonCode<3, 21> {
         uint64_t z = (lhs.data_ & __morton_3_z_mask) - (rhs.data_ & __morton_3_z_mask);
         lhs.data_ = (x & __morton_3_x_mask) | (y & __morton_3_y_mask) | (z & __morton_3_z_mask);
     }
-};
-
-class ZorderComparator : public Comparator {
-public:
-    ZorderComparator() = default;
-    
-    virtual const char* Name() const { return "doux.ZorderComparator"; }
-
-    virtual int Compare(const Slice& a, const Slice& b) {
-        
-    }
-
-
 };
 
 }

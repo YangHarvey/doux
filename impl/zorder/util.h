@@ -16,7 +16,7 @@ static uint64_t FastLog2(const uint64_t x) {
 // Returns the maximum alignment level possible for a given number
 template<uint32_t Dimension, uint32_t BitsPerDimension>
 static uint64_t GetMaxAlignLevel(const uint64_t code) {
-    return code == 0 ? BitsPerDimension + __builtin_ctzll(code) / Dimension;
+    return code == 0 ? BitsPerDimension : __builtin_ctzll(code) / Dimension;
 }
 
 // Returns the level size required for two points to be in the same cell
@@ -99,8 +99,8 @@ static inline constexpr Integer compact_bits_3(Integer v) {
 }
 #else
 template<typename Integer>
-static_assert(sizeof(Integer) == 8, "non 64bit non BMI2 expand/compact_bits_2 are not yet implemented");
-static inline constexpr Integer expand_bits_2(Integer x) {
+static inline Integer expand_bits_2(Integer x) {
+    static_assert(sizeof(Integer) == 8, "non 64bit non BMI2 expand/compact_bits_2 are not yet implemented");
     x = (x ^ (x << 16)) & 0x0000ffff0000ffff;
     x = (x ^ (x << 8))  & 0x00ff00ff00ff00ff;
     x = (x ^ (x << 4))  & 0x0f0f0f0f0f0f0f0f;
@@ -110,7 +110,7 @@ static inline constexpr Integer expand_bits_2(Integer x) {
 }
 
 template<typename Integer>
-static inline constexpr Integer compact_bits_2(Integer x) {
+static inline Integer compact_bits_2(Integer x) {
     x &= 0x5555555555555555;
     x = (x ^ (x >>  1))  & 0x3333333333333333;
     x = (x ^ (x >>  2))  & 0x0f0f0f0f0f0f0f0f;

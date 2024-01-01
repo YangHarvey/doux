@@ -38,6 +38,8 @@ class LEVELDB_EXPORT Iterator {
   // after this call iff the source is not empty.
   virtual void SeekToFirst() = 0;
 
+  virtual void SeekToNth(uint32_t offset) { return; }
+
   // Position at the last key in the source.  The iterator is
   // Valid() after this call iff the source is not empty.
   virtual void SeekToLast() = 0;

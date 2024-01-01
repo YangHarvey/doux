@@ -68,10 +68,14 @@ struct ParsedInternalKey {
   Slice user_key;
   SequenceNumber sequence;
   ValueType type;
+  uint64_t sort_key;
 
   ParsedInternalKey() {}  // Intentionally left uninitialized (for speed)
   ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
       : user_key(u), sequence(seq), type(t) {}
+  ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t, uint64_t sk)
+      : user_key(u), sequence(seq), type(t), sort_key(sk) {}
+
   std::string DebugString() const;
 };
 
@@ -171,6 +175,20 @@ inline bool ParseInternalKey(const Slice& internal_key,
   result->sequence = num >> 8;
   result->type = static_cast<ValueType>(c);
   result->user_key = Slice(internal_key.data(), n - 8);
+  return (c <= static_cast<unsigned char>(kTypeValue));
+}
+
+inline bool ParseInternalVKey(const Slice& internal_key,
+                              ParsedInternalKey* result) {
+  const size_t n = internal_key.size();
+  if (n < 16) return false;
+  uint64_t sort_key = DecodeFixed64(internal_key.data() + n - 8);
+  uint64_t num = DecodeFixed64(internal_key.data() + n - 16);
+  unsigned char c = num & 0xff;
+  result->sort_key = sort_key;
+  result->sequence = num >> 8;
+  result->type = static_cast<ValueType>(c);
+  result->user_key = Slice(internal_key.data(), n - 16);
   return (c <= static_cast<unsigned char>(kTypeValue));
 }
 
