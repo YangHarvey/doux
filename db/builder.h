@@ -27,6 +27,53 @@ struct VInfo {
     uint32_t block_offset;
 };
 
+static bool KCompare(const std::pair<Slice, VInfo>& p1, const std::pair<Slice, VInfo>& p2) {
+  const Slice& s1 = p1.first;
+  const Slice& s2 = p2.first;
+  const size_t sz1 = s1.size(), sz2 = s2.size();
+  const Slice ukey1(s1.data(), sz1 - 16);
+  const Slice ukey2(s2.data(), sz2 - 16);
+  int r = ukey1.compare(ukey2);
+  if (r == 0) {
+    const uint64_t num1 = DecodeFixed64(s1.data() + sz1 - 16);
+    const uint64_t num2 = DecodeFixed64(s2.data() + sz2 - 16);
+    if (num1 > num2) {
+      r = -1;
+    } else if (num1 < num2) {
+      r = +1;
+    }
+  }
+  return r < 0;
+}
+
+static bool VKSliceCompare(const Slice& s1, const Slice& s2) {
+  const size_t sz1 = s1.size(), sz2 = s2.size();
+  const Slice skey1(s1.data() + sz1 - 8, 8);
+  const Slice skey2(s2.data() + sz2 - 8, 8);
+  int r = skey1.compare(skey2);
+  if (r == 0) {
+    const Slice ukey1(s1.data(), sz1 - 16);
+    const Slice ukey2(s2.data(), sz2 - 16);
+    r = ukey1.compare(ukey2);
+    if (r == 0) {
+      const uint64_t num1 = DecodeFixed64(s1.data() + sz1 - 16);
+      const uint64_t num2 = DecodeFixed64(s2.data() + sz2 - 16);
+      if (num1 > num2) {
+        r = -1;
+      } else if (num1 < num2) {
+        r = +1;
+      }
+    }
+  }
+  return r < 0;
+}
+
+static bool VCompare(const std::pair<Slice, VInfo>& p1, const std::pair<Slice, VInfo>& p2) {
+  const Slice& s1 = p1.first;
+  const Slice& s2 = p2.first;
+  return VKSliceCompare(s1, s2);
+}
+
 // Build a Table file from the contents of *iter.  The generated file
 // will be named according to meta->number.  On success, the rest of
 // *meta will be filled with metadata about the generated table.

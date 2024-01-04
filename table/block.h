@@ -220,10 +220,19 @@ public:
     }
 
     virtual void SeekToNth(uint32_t offset) {
-        while (offset > 0 && NextEntryOffset() < restarts_) {
-            ParseNextKey();
-            --offset;
+        uint32_t index = 0;
+        uint32_t cur_offset = 0;
+        uint32_t cur_size = DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
+        while (cur_offset + cur_size < offset) {
+            index += 1;
+            cur_offset += cur_size;
+            cur_size = DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
         }
+
+        SeekToRestartPoint(index);
+        while (ParseNextKey() && NextEntryOffset() < restarts_ && cur_offset < offset) {
+            cur_offset += 1;
+        } 
     }
 
     virtual void SeekToLast() {

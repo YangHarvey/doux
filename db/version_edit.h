@@ -62,6 +62,9 @@ class VersionEdit {
   void SetCompactPointer(int level, const InternalKey& key) {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
+  void SetCompactVPointer(int level, const InternalKey& key) {
+    compact_vpointers_.push_back(std::make_pair(level, key));
+  }
 
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
@@ -92,6 +95,10 @@ class VersionEdit {
     deleted_files_.insert(std::make_pair(level, file));
   }
 
+  void DeleteVFile(int level, uint64_t file) {
+    deleted_vfiles_.insert(std::make_pair(level, file));
+  }
+
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
 
@@ -115,7 +122,9 @@ class VersionEdit {
   bool has_last_sequence_;
 
   std::vector<std::pair<int, InternalKey> > compact_pointers_;
+  std::vector<std::pair<int, InternalKey> > compact_vpointers_;
   DeletedFileSet deleted_files_;
+  DeletedFileSet deleted_vfiles_;
   std::vector<std::pair<int, FileMetaData> > new_files_;
   std::vector<std::pair<int, FileMetaData> > new_vfiles_;
 };

@@ -21,7 +21,10 @@ enum Tag {
   kNewFile = 7,
   // 8 was used for large value refs
   kPrevLogNumber = 9,
-  kNewVFile = 10
+  // For seperated values
+  kCompactVPointer = 10,
+  kDeletedVFile = 11,
+  kNewVFile = 12
 };
 
 void VersionEdit::Clear() {
@@ -36,6 +39,7 @@ void VersionEdit::Clear() {
   has_next_file_number_ = false;
   has_last_sequence_ = false;
   deleted_files_.clear();
+  deleted_vfiles_.clear();
   new_files_.clear();
   new_vfiles_.clear();
 }
@@ -68,9 +72,22 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutLengthPrefixedSlice(dst, compact_pointers_[i].second.Encode());
   }
 
+  for (size_t i = 0; i < compact_vpointers_.size(); i++) {
+    PutVarint32(dst, kCompactVPointer);
+    PutVarint32(dst, compact_vpointers_[i].first);  // level
+    PutLengthPrefixedSlice(dst, compact_vpointers_[i].second.Encode());
+  }
+
   for (DeletedFileSet::const_iterator iter = deleted_files_.begin();
        iter != deleted_files_.end(); ++iter) {
     PutVarint32(dst, kDeletedFile);
+    PutVarint32(dst, iter->first);   // level
+    PutVarint64(dst, iter->second);  // file number
+  }
+
+  for (DeletedFileSet::const_iterator iter = deleted_vfiles_.begin();
+       iter != deleted_vfiles_.end(); ++iter) {
+    PutVarint32(dst, kDeletedVFile);
     PutVarint32(dst, iter->first);   // level
     PutVarint64(dst, iter->second);  // file number
   }
@@ -179,6 +196,14 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           msg = "compaction pointer";
         }
         break;
+      
+      case kCompactVPointer:
+        if (GetLevel(&input, &level) && GetInternalKey(&input, &key)) {
+          compact_vpointers_.push_back(std::make_pair(level, key));
+        } else {
+          msg = "compaction vpointer";
+        }
+        break;
 
       case kDeletedFile:
         if (GetLevel(&input, &level) && GetVarint64(&input, &number)) {
@@ -188,6 +213,14 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
 
+      case kDeletedVFile:
+        if (GetLevel(&input, &level) && GetVarint64(&input, &number)) {
+          deleted_vfiles_.insert(std::make_pair(level, number));
+        } else {
+          msg = "deleted vfile";
+        }
+        break;
+      
       case kNewFile:
         if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
             GetVarint64(&input, &f.file_size) &&
@@ -256,9 +289,22 @@ std::string VersionEdit::DebugString() const {
     r.append(" ");
     r.append(compact_pointers_[i].second.DebugString());
   }
+  for (size_t i = 0; i < compact_vpointers_.size(); i++) {
+    r.append("\n  CompactVPointer: ");
+    AppendNumberTo(&r, compact_vpointers_[i].first);
+    r.append(" ");
+    r.append(compact_vpointers_[i].second.DebugString());
+  }
   for (DeletedFileSet::const_iterator iter = deleted_files_.begin();
        iter != deleted_files_.end(); ++iter) {
     r.append("\n  DeleteFile: ");
+    AppendNumberTo(&r, iter->first);
+    r.append(" ");
+    AppendNumberTo(&r, iter->second);
+  }
+  for (DeletedFileSet::const_iterator iter = deleted_vfiles_.begin();
+       iter != deleted_vfiles_.end(); ++iter) {
+    r.append("\n  DeleteVFile: ");
     AppendNumberTo(&r, iter->first);
     r.append(" ");
     AppendNumberTo(&r, iter->second);
@@ -278,7 +324,7 @@ std::string VersionEdit::DebugString() const {
   }
   for (size_t i = 0; i < new_vfiles_.size(); i++) {
     const FileMetaData& f = new_vfiles_[i].second;
-    r.append("\n  AddFile: ");
+    r.append("\n  AddVFile: ");
     AppendNumberTo(&r, new_vfiles_[i].first);
     r.append(" ");
     AppendNumberTo(&r, f.number);

@@ -199,6 +199,32 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
   return iter;
 }
 
+Iterator* Table::VBlockReader(void* arg, const ReadOptions& options,
+                              const Slice& index_value) {
+  Table* table = reinterpret_cast<Table*>(arg);
+  Block* block = nullptr;
+  BlockHandle handle;
+  Slice input = index_value;
+  Status s = handle.DecodeFrom(&input);
+
+  if (s.ok()) {
+    BlockContents contents;
+    s = ReadBlock(table->rep_->file, options, handle, &contents);
+    if (s.ok()) {
+      block = new Block(contents);
+    }
+  }
+
+  Iterator* iter;
+  if (block != nullptr) {
+    iter = block->NewIterator(VKeyComparator());
+    iter->RegisterCleanup(&DeleteBlock, block, nullptr);
+  } else {
+    iter = NewErrorIterator(s);
+  }
+  return iter;
+}
+
 Iterator* Table::NewIterator(const ReadOptions& options, int file_num, RandomAccessFile* file) const {
   if (file != nullptr && (adgMod::MOD == 6 || adgMod::MOD == 7)) {
     adgMod::LearnedIndexData* model = adgMod::file_data->GetModel(file_num);
@@ -210,15 +236,19 @@ Iterator* Table::NewIterator(const ReadOptions& options, int file_num, RandomAcc
       &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
+Iterator* Table::NewVIterator(const ReadOptions& options) const {
+  return NewTwoLevelIterator(
+    rep_->index_block->NewIterator(VKeyComparator()),
+    &Table::VBlockReader, const_cast<Table*>(this), options
+  );
+}
+
 Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*handle_result)(void*, const Slice&, const Slice&), int level,
                           FileMetaData* meta, uint64_t lower, uint64_t upper, bool learned, Version* version) {
   adgMod::Stats* instance = adgMod::Stats::GetInstance();
   Status s;
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  ParsedInternalKey parsed_key;
-  ParseInternalKey(k, &parsed_key);
-
 
 #ifdef INTERNAL_TIMER
   instance->StartTimer(2);
@@ -277,9 +307,7 @@ Status Table::InternalVGet(const ReadOptions& options, const Slice& k, void* arg
                            uint32_t block_number, uint32_t block_offset) {
   adgMod::Stats* instance = adgMod::Stats::GetInstance();
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  ParsedInternalKey parsed_vkey;
-  ParseInternalVKey(k, &parsed_vkey);
+  Iterator* iiter = rep_->index_block->NewIterator(VKeyComparator());
 
 #ifdef INTERNAL_TIMER
   instance->StartTimer(2);
@@ -296,7 +324,7 @@ Status Table::InternalVGet(const ReadOptions& options, const Slice& k, void* arg
 #ifdef INTERNAL_TIMER
       instance->StartTimer(5);
 #endif
-      Iterator* block_iter = BlockReader(this, options, iiter->value());
+      Iterator* block_iter = VBlockReader(this, options, iiter->value());
 #ifdef INTERNAL_TIMER
       instance->PauseTimer(5);
       instance->StartTimer(3);

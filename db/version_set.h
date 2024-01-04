@@ -19,9 +19,11 @@
 #include <set>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "db/dbformat.h"
 #include "db/version_edit.h"
+#include "db/builder.h"
 #include "leveldb/table.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
@@ -103,6 +105,7 @@ class Version {
       const InternalKey* begin,  // nullptr means before all keys
       const InternalKey* end,    // nullptr means after all keys
       std::vector<FileMetaData*>* inputs);
+  
 
   // Returns true iff some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].
@@ -115,6 +118,10 @@ class Version {
   // result that covers the range [smallest_user_key,largest_user_key].
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
+
+  void SetVInput(int which,
+                 std::vector<FileMetaData*>* inputs, 
+                 std::vector<FileMetaData*>* vinputs);
 
   int NumFiles(int level) const { return files_[level].size(); }
 
@@ -145,9 +152,14 @@ class Version {
         file_to_compact_level_(-1),
         compaction_score_(-1),
         compaction_level_(-1) {
-            for (int i = 0; i < config::kNumLevels; ++i)
-                learned_index_data_.push_back(std::make_shared<adgMod::LearnedIndexData>(adgMod::level_allowed_seek));
-        }
+    for (int i = 0; i < config::kNumLevels; ++i) {
+      learned_index_data_.push_back(std::make_shared<adgMod::LearnedIndexData>(adgMod::level_allowed_seek));
+    }
+    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+      vfiles_.resize(sz);
+    }
+  }
 
   Version(const Version&) = delete;
   Version& operator=(const Version&) = delete;
@@ -171,6 +183,7 @@ class Version {
 
   // List of files per level
   std::vector<FileMetaData*> files_[config::kNumLevels];
+  std::vector<std::vector<FileMetaData*>> vfiles_;
 
   // Next file to compact based on seek stats.
   FileMetaData* file_to_compact_;
@@ -299,7 +312,7 @@ class VersionSet {
   static bool IsFound(void* arg);
 
 
- private:
+ public:
   class Builder;
   friend class adgMod::LearnedIndexData;
 
@@ -344,6 +357,8 @@ class VersionSet {
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
+  std::vector<std::string> compact_vpointers_;
+  char default_value_[sizeof(uint32_t) * 4];
 };
 
 // A Compaction encapsulates information about a compaction.
@@ -367,6 +382,14 @@ class Compaction {
 
   // Maximum size of files to build during this compaction.
   uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
+
+  uint64_t MaxValueOutputFileSize() const {
+    uint64_t kv_size = adgMod::key_size + sizeof(uint64_t) 
+                     + 4 * sizeof(uint64_t);
+    uint64_t value_size = adgMod::key_size + sizeof(uint64_t) 
+                        + adgMod::value_size;
+    return max_output_file_size_ * value_size / kv_size;
+  }
 
   // Is this a trivial compaction that can be implemented by just
   // moving a single input file to the next level (no merging or splitting)
@@ -399,9 +422,15 @@ class Compaction {
   Version* input_version_;
   VersionEdit edit_;
 
+ public:
   // Each compaction reads inputs from "level_" and "level_+1"
   std::vector<FileMetaData*> inputs_[2];  // The two sets of inputs
+  std::vector<FileMetaData*> vinputs_[2];
 
+  std::unordered_set<Slice, HashSlice> key_set_;
+  std::vector<std::pair<Slice, VInfo>> pending_kvs_;
+
+ private:
   // State used to check for number of overlapping grandparent files
   // (parent == level_ + 1, grandparent == level_ + 2)
   std::vector<FileMetaData*> grandparents_;

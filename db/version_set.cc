@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <iterator>
 
 #include "db/filename.h"
 #include "db/log_reader.h"
@@ -533,7 +534,11 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
                 }
                 adgMod::file_stats_mutex.Unlock();
             }
-#endif
+#endif      
+            if (adgMod::MOD == 9) {
+              value->assign(vset_->default_value_, 32);
+              s = Status();
+            }
             break;  // Keep searching in other files
         }
         case kFound: {
@@ -560,7 +565,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     }
   }
 
-  return Status::NotFound(Slice());  // Use an empty error message for speed
+  return s;  // Use an empty error message for speed
 }
 
 Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, std::string* val,
@@ -584,8 +589,13 @@ Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, s
     s = vset_->env_->NewRandomAccessFile(vfname, &file);
     if (s.ok()) {
       s = Table::Open(*(vset_->options_), file, file_size, &table);
-      vtables_[file_number] = table;
-      s = table->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
+      if (!s.ok()) {
+        assert(table == nullptr);
+        delete file;
+      } else {
+        vtables_[file_number] = table;
+        s = table->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
+      }
     }
   } else {
     s = vtables_[file_number]->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
@@ -732,6 +742,23 @@ void Version::GetOverlappingInputs(int level, const InternalKey* begin,
   }
 }
 
+void Version::SetVInput(int which,
+                        std::vector<FileMetaData*>* inputs, 
+                        std::vector<FileMetaData*>* vinputs) {
+  for (int level = 0; level < 2; level++) {
+    for (int i = 0; i < inputs[level].size(); i++) {
+      for (int j = 0; j < vfiles_[which + level].size(); j++) {
+        if (inputs[level][i]->number == vfiles_[which + level][j]->number) {
+          FileMetaData* vmeta = vfiles_[which + level][j];
+          vinputs[level].push_back(vmeta);
+          break;
+        }
+      }
+    }
+    assert(inputs[level].size() == vinputs[level].size());
+  }
+}
+
 std::string Version::DebugString() const {
   std::string r;
   for (int level = 0; level < config::kNumLevels; level++) {
@@ -765,7 +792,7 @@ class VersionSet::Builder {
  private:
   // Helper to sort by v->files_[file_number].smallest
   struct BySmallestKey {
-    const InternalKeyComparator* internal_comparator;
+    const Comparator* internal_comparator;
 
     bool operator()(FileMetaData* f1, FileMetaData* f2) const {
       int r = internal_comparator->Compare(f1->smallest, f2->smallest);
@@ -787,6 +814,7 @@ class VersionSet::Builder {
   VersionSet* vset_;
   Version* base_;
   LevelState levels_[config::kNumLevels];
+  std::vector<LevelState> vlevels_;
 
  public:
   // Initialize a builder with the files from *base and other info from *vset
@@ -796,6 +824,17 @@ class VersionSet::Builder {
     cmp.internal_comparator = &vset_->icmp_;
     for (int level = 0; level < config::kNumLevels; level++) {
       levels_[level].added_files = new FileSet(cmp);
+    }
+    
+    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      if (adgMod::MOD == 10) {
+        cmp.internal_comparator = VKeyComparator();
+      }
+      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+      vlevels_.resize(sz);
+      for (int level = 0; level < sz; level++) {
+        vlevels_[level].added_files = new FileSet(cmp);
+      }
     }
   }
 
@@ -817,6 +856,24 @@ class VersionSet::Builder {
         }
       }
     }
+
+    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+      for (int level = 0; level < sz; level++) {
+        const FileSet* added = vlevels_[level].added_files;
+        std::vector<FileMetaData*> to_unref;
+        std::copy(added->begin(), added->end(), std::back_inserter(to_unref));
+        delete added;
+        for (uint32_t i = 0; i < to_unref.size(); i++) {
+          FileMetaData* f = to_unref[i];
+          f->refs--;
+          if (f->refs <= 0) {
+            delete f;
+          }
+        }
+      }
+    }
+
     base_->Unref();
   }
 
@@ -828,6 +885,12 @@ class VersionSet::Builder {
       vset_->compact_pointer_[level] =
           edit->compact_pointers_[i].second.Encode().ToString();
     }
+    for (size_t i = 0; i < edit->compact_vpointers_.size(); i++) {
+      const int level = edit->compact_pointers_[i].first;
+      vset_->compact_vpointers_[level] = 
+          edit->compact_vpointers_[i].second.Encode().ToString();
+    }
+
 
     // Delete files
     const VersionEdit::DeletedFileSet& del = edit->deleted_files_;
@@ -836,6 +899,13 @@ class VersionSet::Builder {
       const int level = iter->first;
       const uint64_t number = iter->second;
       levels_[level].deleted_files.insert(number);
+    }
+    const VersionEdit::DeletedFileSet& vdel = edit->deleted_vfiles_;
+    for (VersionEdit::DeletedFileSet::const_iterator iter = vdel.begin();
+         iter != vdel.end(); ++iter) {
+      const int level = iter->first;
+      const uint64_t number = iter->second;
+      vlevels_[level].deleted_files.insert(number);
     }
 
     // Add new files
@@ -857,11 +927,25 @@ class VersionSet::Builder {
       // same as the compaction of 40KB of data.  We are a little
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
-      f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
-      if (f->allowed_seeks < 100) f->allowed_seeks = 100;
+
+      // f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
+      // if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
       levels_[level].deleted_files.erase(f->number);
       levels_[level].added_files->insert(f);
+    }
+    
+    size_t vfile_size = edit->new_vfiles_.size();
+    for (size_t i = 0; i < vfile_size; i++) {
+      const int level = edit->new_vfiles_[i].first;
+      FileMetaData* f = new FileMetaData(edit->new_vfiles_[i].second);
+      f->refs = 1;
+
+      // f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
+      // if (f->allowed_seeks < 100) f->allowed_seeks = 100;
+
+      vlevels_[level].deleted_files.erase(f->number);
+      vlevels_[level].added_files->insert(f);
     }
   }
 
@@ -869,6 +953,7 @@ class VersionSet::Builder {
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
+
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
@@ -910,6 +995,33 @@ class VersionSet::Builder {
       }
 #endif
     }
+
+    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      if (adgMod::MOD == 10) {
+        cmp.internal_comparator = VKeyComparator();
+      }
+      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+      for (int level = 0; level < sz; level++) {
+        const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
+        std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
+        std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
+        const FileSet* added = vlevels_[level].added_files;
+        v->vfiles_[level].reserve(base_files.size() + added->size());
+        for (FileSet::const_iterator added_iter = added->begin();
+             added_iter != added->end(); ++added_iter) {
+          for (std::vector<FileMetaData*>::const_iterator bpos = 
+                  std::upper_bound(base_iter, base_end, *added_iter, cmp);
+               base_iter != bpos; ++base_iter) {
+            MaybeAddVFile(v, level, *base_iter);
+          }
+          MaybeAddVFile(v, level, *added_iter);
+        }
+
+        for (; base_iter != base_end; ++base_iter) {
+          MaybeAddVFile(v, level, *base_iter);
+        }
+      }
+    }
   }
 
   void MaybeAddFile(Version* v, int level, FileMetaData* f) {
@@ -921,6 +1033,20 @@ class VersionSet::Builder {
         // Must not overlap
         assert(vset_->icmp_.Compare((*files)[files->size() - 1]->largest,
                                     f->smallest) < 0);
+      }
+      f->refs++;
+      files->push_back(f);
+    }
+  }
+
+  void MaybeAddVFile(Version* v, int level, FileMetaData* f) {
+    if (vlevels_[level].deleted_files.count(f->number) > 0) {
+      // File is deleted: do nothing
+    } else {
+      std::vector<FileMetaData*>* files = &v->vfiles_[level];
+      if (level > 0 && !files->empty()) {
+        const Comparator* cmp = adgMod::MOD == 9 ? &vset_->icmp_ : VKeyComparator();
+        assert(cmp->Compare((*files)[files->size() - 1]->largest, f->smallest) < 0);
       }
       f->refs++;
       files->push_back(f);
@@ -945,6 +1071,10 @@ VersionSet::VersionSet(const std::string& dbname, const Options* options,
       descriptor_log_(nullptr),
       dummy_versions_(this),
       current_(nullptr) {
+  if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+    size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+    compact_vpointers_.resize(sz);
+  }
   AppendVersion(new Version(this));
 }
 
@@ -965,6 +1095,9 @@ void VersionSet::AppendVersion(Version* v) {
     current_->Unref();
   }
   current_ = v;
+  for (const auto& it : v->vtables_) {
+    current_->vtables_[it.first] = it.second;
+  }
   v->Ref();
 
   // Append to linked list
@@ -1297,12 +1430,30 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
     }
   }
 
+  // Save vcompaction pointers
+  for (int level = 0; level < compact_vpointers_.size(); level++) {
+    if (!compact_vpointers_[level].empty()) {
+      InternalKey key;
+      key.DecodeFrom(compact_vpointers_[level]);
+      edit.SetCompactVPointer(level, key);
+    }
+  }
+
   // Save files
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
       edit.AddFile(level, f->number, f->file_size, f->smallest, f->largest);
+    }
+  }
+
+  // Save vfiles
+  for (int level = 0; level < current_->vfiles_.size(); level++) {
+    const std::vector<FileMetaData*>& vfiles = current_->vfiles_[level];
+    for (size_t i = 0; i < vfiles.size(); i++) {
+      const FileMetaData* f = vfiles[i];
+      edit.AddVFile(level, f->number, f->file_size, f->smallest, f->largest);
     }
   }
 
@@ -1780,19 +1931,35 @@ void Compaction::ReleaseInputs() {
 
 
 void Version::PrintAll() const {
-    for (int i = 1; i < config::kNumLevels; ++i) {
-        for (int j = 0; j < files_[i].size(); ++j) {
-            if (j == 0) printf("Level %d\n", i);
-            FileMetaData* file = files_[i][j];
-            string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
-            string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
-            printf("File %d in level %d:\n"
-                           "\tNumber: %lu\n"
-                           "\tSize: %lu\n"
-                           "\tNumEntries: %lu\n"
-                           "\tKey Range: %s to %s\n", j, i, file->number, file->file_size, 0,
-                           small_key.c_str(), large_key.c_str());
-        }
+    for (int i = 0; i < config::kNumLevels; ++i) {
+      for (int j = 0; j < files_[i].size(); ++j) {
+        if (j == 0) printf("Level %d\n", i);
+        FileMetaData* file = files_[i][j];
+        string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
+        string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+        printf("File %d in level %d:\n"
+                        "\tNumber: %lu\n"
+                        "\tSize: %lu\n"
+                        "\tNumEntries: %lu\n"
+                        "\tKey Range: %s to %s\n", j, i, file->number, file->file_size, 0,
+                        small_key.c_str(), large_key.c_str());
+      }
+    }
+
+    int levels = adgMod::MOD == 9 ? config::kNumLevels : 2;
+    for (int i = 0 ; i < levels; ++i) {
+      for (int j = 0; j < vfiles_[i].size(); ++j) {
+        if (j == 0) printf("Level %d\n", i);
+        FileMetaData* file = vfiles_[i][j];
+        string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
+        string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+        printf("VFile %d in level %d:\n"
+                        "\tNumber: %lu\n"
+                        "\tSize: %lu\n"
+                        "\tNumEntries: %lu\n"
+                        "\tKey Range: %s to %s\n", j, i, file->number, file->file_size, 0,
+                        small_key.c_str(), large_key.c_str());
+      }
     }
 }
 

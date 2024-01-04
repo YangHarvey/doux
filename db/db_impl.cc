@@ -825,6 +825,12 @@ void DBImpl::BackgroundCompaction() {
     c->edit()->DeleteFile(c->level(), f->number);
     c->edit()->AddFile(c->level() + 1, f->number, f->file_size, f->smallest,
                        f->largest);
+    // if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+    //   c->edit()->DeleteVFile(c->level(), f->number);
+    //   int next_level = adgMod::MOD == 9 ? c->level() + 1 : 1;
+    //   c->edit()->AddVFile(next_level, f->number, f->file_size, f->smallest,
+    //                      f->largest);
+    // }
     status = versions_->LogAndApply(c->edit(), &mutex_);
 
     if (!adgMod::fresh_write) {
@@ -857,39 +863,29 @@ void DBImpl::BackgroundCompaction() {
   }
 
 
-
-
-
-    if (c != nullptr) {
-      std::set<int> changed_level;
-      for (auto& item: c->edit()->deleted_files_) {
-          changed_level.insert(item.first);
-      }
-      for (auto& item: c->edit()->new_files_) {
-          changed_level.insert(item.first);
-      }
-
-      string changed_level_string;
-
-      auto time = instance->PauseTimer(7, true);
-
-      adgMod::compaction_counter_mutex.Lock();
-      for (auto item: changed_level) {
-          changed_level_string += to_string(item);
-          adgMod::levelled_counters[5].Increment(item, time.second - time.first);
-      }
-      adgMod::events[0].push_back(new CompactionEvent(time, std::move(changed_level_string)));
-      adgMod::compaction_counter_mutex.Unlock();
-    } else {
-        instance->PauseTimer(7);
+  if (c != nullptr) {
+    std::set<int> changed_level;
+    for (auto& item: c->edit()->deleted_files_) {
+        changed_level.insert(item.first);
+    }
+    for (auto& item: c->edit()->new_files_) {
+        changed_level.insert(item.first);
     }
 
+    string changed_level_string;
 
+    auto time = instance->PauseTimer(7, true);
 
-
-
-
-
+    adgMod::compaction_counter_mutex.Lock();
+    for (auto item: changed_level) {
+        changed_level_string += to_string(item);
+        adgMod::levelled_counters[5].Increment(item, time.second - time.first);
+    }
+    adgMod::events[0].push_back(new CompactionEvent(time, std::move(changed_level_string)));
+    adgMod::compaction_counter_mutex.Unlock();
+  } else {
+    instance->PauseTimer(7);
+  }
 
   delete c;
 
@@ -914,8 +910,6 @@ void DBImpl::BackgroundCompaction() {
     }
     manual_compaction_ = nullptr;
   }
-
-
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -970,7 +964,10 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   assert(output_number != 0);
 
   // Check for iterator errors
-  Status s = input->status();
+  Status s;
+  if (input) {
+    s = input->status();
+  }
   const uint64_t current_entries = compact->builder->NumEntries();
   if (s.ok()) {
     s = compact->builder->Finish();
@@ -1047,6 +1044,13 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
+inline Slice DBImpl::ConstructSlice(const Slice& from, Arena* arena) {
+  size_t size = from.size();
+  char* buf = arena->Allocate(size);
+  memcpy(buf, from.data(), size);
+  return Slice(buf, size);
+}
+
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
@@ -1076,7 +1080,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   bool has_current_user_key = false;
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
 
-//  vector<string> keys;
+  Arena arena;
+  std::unordered_set<Slice, HashSlice>& key_set = compact->compaction->key_set_;
+  std::vector<std::pair<Slice, VInfo>>& pending_kvs = compact->compaction->pending_kvs_;
 
   for (; input->Valid() && !shutting_down_.load(std::memory_order_acquire);) {
     // Prioritize immutable compaction work
@@ -1093,9 +1099,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     }
 
     Slice key = input->key();
-//    ParsedInternalKey parsed;
-//    ParseInternalKey(key, &parsed);
-//    keys.push_back(parsed.user_key);
 
     if (compact->compaction->ShouldStopBefore(key) &&
         compact->builder != nullptr) {
@@ -1149,27 +1152,31 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         compact->compaction->IsBaseLevelForKey(ikey.user_key),
         (int)last_sequence_for_key, (int)compact->smallest_snapshot);
 #endif
-
+    
     if (!drop) {
-      // Open output file if necessary
-      if (compact->builder == nullptr) {
-        status = OpenCompactionOutputFile(compact);
-        if (!status.ok()) {
-          break;
+      if (adgMod::MOD == 9) {
+        key_set.emplace(key);
+      } else {
+        // Open output file if necessary
+        if (compact->builder == nullptr) {
+          status = OpenCompactionOutputFile(compact);
+          if (!status.ok()) {
+            break;
+          }
         }
-      }
-      if (compact->builder->NumEntries() == 0) {
-        compact->current_output()->smallest.DecodeFrom(key);
-      }
-      compact->current_output()->largest.DecodeFrom(key);
-      compact->builder->Add(key, input->value());
+        if (compact->builder->NumEntries() == 0) {
+          compact->current_output()->smallest.DecodeFrom(key);
+        }
+        compact->current_output()->largest.DecodeFrom(key);
+        compact->builder->Add(key, input->value());
 
-      // Close output file if it is big enough
-      if (compact->builder->FileSize() >=
-          compact->compaction->MaxOutputFileSize()) {
-        status = FinishCompactionOutputFile(compact, input);
-        if (!status.ok()) {
-          break;
+        // Close output file if it is big enough
+        if (compact->builder->FileSize() >=
+            compact->compaction->MaxOutputFileSize()) {
+          status = FinishCompactionOutputFile(compact, input);
+          if (!status.ok()) {
+            break;
+          }
         }
       }
     }
@@ -1180,14 +1187,174 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
     status = Status::IOError("Deleting DB during compaction");
   }
-  if (status.ok() && compact->builder != nullptr) {
-    status = FinishCompactionOutputFile(compact, input);
+
+  if (adgMod::MOD == 9) {
+    versions_->current()->SetVInput(compact->compaction->level(), 
+        compact->compaction->inputs_, compact->compaction->vinputs_);
+    ReadOptions options;
+    options.verify_checksums = options_.paranoid_checks;
+    options.fill_cache = false;
+
+    // Read values into pending_kvs
+    std::unordered_map<uint64_t, Table*>& vtables = versions_->current()->vtables_;
+    for (int which = 0; which < 2; which++) {
+      const std::vector<FileMetaData*>& files = compact->compaction->vinputs_[which];
+      for (int i = 0; i < files.size(); i++) {
+        Iterator* it;
+        if (vtables.find(files[i]->number) == vtables.end()) {
+          std::string vfname = VTableFileName(versions_->dbname_, files[i]->number);
+          RandomAccessFile* file = nullptr;
+          Table* table = nullptr;
+          status = versions_->env_->NewRandomAccessFile(vfname, &file);
+          if (status.ok()) {
+            // std::cout << "Magic for " << std::dec << files[i]->number << ": ";
+            status = Table::Open(*(versions_->options_), file, files[i]->file_size, &table);
+            vtables[files[i]->number] = table;
+            // std::cout << "Open VSST " << vfname << " successfully!" << std::endl;
+            it = table->NewVIterator(options);
+          }
+        } else {
+          it = vtables[files[i]->number]->NewVIterator(options);
+        }
+
+        // Get valid values
+        if (status.ok() && it) {
+          for (it->SeekToFirst(); it->Valid(); it->Next()) {
+            Slice key = ConstructSlice(it->key(), &arena);
+            Slice value = ConstructSlice(it->value(), &arena);
+            VInfo info;
+            info.value = value;
+            pending_kvs.emplace_back(key, info);
+          }
+          assert(it->status().ok());
+        }
+      }
+    }
+
+    // Write kvs
+    // Globally sorted by key, and internally sorted by value
+    if (status.ok() && adgMod::MOD == 9) {
+      std::sort(pending_kvs.begin(), pending_kvs.end(), KCompare);
+      std::vector<std::pair<Slice, VInfo>> sorted_values;
+      uint64_t curr_size = 0;
+      uint64_t max_value_file_size = compact->compaction->MaxValueOutputFileSize();
+      for (int i = 0; i < pending_kvs.size(); i++) {
+        sorted_values.emplace_back(pending_kvs[i]);
+        curr_size += sorted_values[sorted_values.size() - 1].second.value.size();
+        curr_size += (adgMod::key_size + sizeof(uint64_t));
+        if (curr_size >= max_value_file_size) {
+          std::sort(sorted_values.begin(), sorted_values.end(), VCompare);
+          if (compact->builder == nullptr) {
+            status = OpenCompactionOutputFile(compact);
+            if (!status.ok()) {
+              break;
+            }
+          }
+
+          // Generate value table
+          std::string vfname = VTableFileName(versions_->dbname_, compact->current_output()->number);
+          WritableFile* vfile;
+          status = versions_->env_->NewWritableFile(vfname, &vfile);
+          if (!status.ok()) {
+            return status;
+          }
+          TableBuilder* vbuilder = new TableBuilder(options_, vfile);
+          int value_count = sorted_values.size();
+          FileMetaData vmeta;
+          vmeta.number = compact->current_output()->number;
+          Slice min_key = pending_kvs[i + 1 - value_count].first;
+          min_key.remove_suffix(8);
+          Slice max_key = pending_kvs[i].first;
+          max_key.remove_suffix(8);
+          vmeta.smallest.DecodeFrom(min_key);
+          vmeta.largest.DecodeFrom(max_key);
+          for (int j = 0; j < value_count; ++j) {
+            sorted_values[j].second.file_number = static_cast<uint32_t>(vmeta.number);
+            sorted_values[j].second.block_number = vbuilder->BlockNumber();
+            sorted_values[j].second.block_offset = vbuilder->BlockOffset();
+            vbuilder->Add(sorted_values[j].first, sorted_values[j].second.value);
+          }
+
+          status = vbuilder->Finish();
+          if (status.ok()) {
+            vmeta.file_size = vbuilder->FileSize();
+            for (int j = 0; j < value_count; ++j) {
+              sorted_values[j].second.file_size = vmeta.file_size;
+            }
+            assert(vmeta.file_size > 0);
+          }
+          delete vbuilder;
+
+          if (status.ok()) {
+            status = vfile->Sync();
+          }
+          if (status.ok()) {
+            status = vfile->Close();
+          }
+          delete vfile;
+          vfile = nullptr;
+          // std::cout << "Write VSST " << vfname << " to L" << compact->compaction->level() + 1 << " successfully!" << std::endl;
+          compact->compaction->edit()->DeleteVFile(compact->compaction->level(), vmeta.number);
+          compact->compaction->edit()->AddVFile(compact->compaction->level() + 1,
+              vmeta.number, vmeta.file_size, vmeta.smallest, vmeta.largest);
+
+          // RandomAccessFile* read_file = nullptr;
+          // Table* read_table = nullptr;
+          // versions_->env_->NewRandomAccessFile(vfname, &read_file);
+          // std::cout << "Magic for (after write)" << std::dec << vmeta.number << ": ";
+          // Table::Open(*(versions_->options_), read_file, vmeta.file_size, &read_table);
+
+
+          // Generate key table
+          std::sort(sorted_values.begin(), sorted_values.end(), KCompare);
+          min_key = sorted_values[0].first;
+          min_key.remove_suffix(8);
+          max_key = sorted_values[sorted_values.size() - 1].first;
+          max_key.remove_suffix(8);
+          compact->current_output()->smallest.DecodeFrom(min_key);
+          compact->current_output()->largest.DecodeFrom(max_key);
+          for (int j = 0; j < value_count; ++j) {
+            char buffer[sizeof(uint32_t) * 4];
+            EncodeFixed32(buffer, sorted_values[j].second.file_number);
+            EncodeFixed32(buffer + sizeof(uint32_t), sorted_values[j].second.file_size);
+            EncodeFixed32(buffer + sizeof(uint32_t) * 2, sorted_values[j].second.block_number);
+            EncodeFixed32(buffer + sizeof(uint32_t) * 3, sorted_values[j].second.block_offset);
+            Slice key = sorted_values[j].first;
+            key.remove_suffix(8);
+            compact->builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 4});
+          }
+
+          status = FinishCompactionOutputFile(compact, nullptr);
+          if (!status.ok()) {
+            break;
+          }
+
+          sorted_values.clear();
+          curr_size = 0;
+        }
+      }
+    }
+  } else {
+    if (status.ok() && compact->builder != nullptr) {
+      status = FinishCompactionOutputFile(compact, input);
+    }
   }
+
   if (status.ok()) {
     status = input->status();
   }
   delete input;
   input = nullptr;
+  for (int level = 0; level < 2; level++) {
+    const std::vector<FileMetaData*>& files = compact->compaction->vinputs_[level];
+    for (int i = 0; i < files.size(); i++) {
+      std::string fname = VTableFileName(dbname_, files[i]->number);
+      env_->DeleteFile(fname);
+      versions_->current()->vtables_.erase(files[i]->number);
+    }
+  }
+  key_set.clear();
+  pending_kvs.clear();
 
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros - imm_micros;
@@ -1350,7 +1517,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         uint32_t file_size = DecodeFixed32(value->c_str() + sizeof(uint32_t));
         uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
         uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 3);
-        s = current->GetFromVFile(options, lkey, value, file_number, file_size,
+        current->GetFromVFile(options, lkey, value, file_number, file_size,
                                   block_number, block_offset, &stats);
         
 #ifdef INTERNAL_TIMER
