@@ -120,7 +120,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       return s;
     }
 
-    for (; viter->Valid(); viter->Next()) {
+    for (viter->SeekToFirst(); viter->Valid(); viter->Next()) {
       Slice key = viter->key();
       Slice value = viter->value();
       Slice vkey = ConstructVKey(key, value, arena);
@@ -204,7 +204,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     int idx = 0;
-    for (; iter->Valid(); iter->Next()) {
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       Slice key = iter->key();
       meta->largest.DecodeFrom(key);
       char buffer[sizeof(uint32_t) * 4];
