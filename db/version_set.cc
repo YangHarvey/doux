@@ -565,7 +565,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     }
   }
 
-  return s;  // Use an empty error message for speed
+  return s;
 }
 
 Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, std::string* val,
@@ -928,8 +928,8 @@ class VersionSet::Builder {
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
 
-      // f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
-      // if (f->allowed_seeks < 100) f->allowed_seeks = 100;
+      f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
+      if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
       levels_[level].deleted_files.erase(f->number);
       levels_[level].added_files->insert(f);
@@ -1105,6 +1105,16 @@ void VersionSet::AppendVersion(Version* v) {
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;
   v->next_->prev_ = v;
+
+  if (v->vfiles_.size() > 0 && v->vfiles_[0].size() > 0) {
+    FileMetaData* vf = v->vfiles_[0][0];
+    if (vf) {
+      EncodeFixed32(default_value_, vf->number);
+      EncodeFixed32(default_value_ + sizeof(uint32_t), vf->file_size);
+      EncodeFixed32(default_value_ + sizeof(uint32_t) * 2, 0);
+      EncodeFixed32(default_value_ + sizeof(uint32_t) * 3, 0);
+    }
+  }
 }
 
 void VersionSet::ApplyToModel(VersionEdit* edit, Version* previous, Version* current) {
@@ -1877,6 +1887,15 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
   }
 }
 
+void Compaction::AddVInputDeletions(VersionEdit* edit) {
+  int cur_level = adgMod::MOD == 9 ? level_ : 0;
+  for (int which = 0; which < 2; which++) {
+    for (size_t i = 0; i < vinputs_[which].size(); i++) {
+      edit->DeleteVFile(cur_level + which, vinputs_[which][i]->number);
+    }
+  }
+}
+
 bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
   // Maybe use binary search to find right entry instead of linear search?
   const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();
@@ -1946,6 +1965,7 @@ void Version::PrintAll() const {
       }
     }
 
+    printf("\n");
     int levels = adgMod::MOD == 9 ? config::kNumLevels : 2;
     for (int i = 0 ; i < levels; ++i) {
       for (int j = 0; j < vfiles_[i].size(); ++j) {

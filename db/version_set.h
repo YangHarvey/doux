@@ -376,9 +376,12 @@ class Compaction {
 
   // "which" must be either 0 or 1
   int num_input_files(int which) const { return inputs_[which].size(); }
+  int num_input_vfiles(int which) const { return vinputs_[which].size(); }
 
   // Return the ith input file at "level()+which" ("which" must be 0 or 1).
   FileMetaData* input(int which, int i) const { return inputs_[which][i]; }
+  FileMetaData* vinput(int which, int i) const { return vinputs_[which][i]; }
+
 
   // Maximum size of files to build during this compaction.
   uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
@@ -397,6 +400,8 @@ class Compaction {
 
   // Add all inputs to this compaction as delete operations to *edit.
   void AddInputDeletions(VersionEdit* edit);
+
+  void AddVInputDeletions(VersionEdit* edit);
 
   // Returns true if the information we have available guarantees that
   // the compaction is producing data in "level+1" for which no data exists
