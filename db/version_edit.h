@@ -9,10 +9,12 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "db/dbformat.h"
 #include "mod/stats.h"
 #include "mod/learned_index.h"
+#include "impl/dependency.h"
 
 using std::vector;
 
@@ -21,7 +23,7 @@ namespace leveldb {
 class VersionSet;
 
 struct FileMetaData {
-  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), num_keys(0) {}
+  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), num_keys(0), invalid_count(0) {}
 
   int refs;
   int allowed_seeks;  // Seeks allowed until compaction
@@ -30,6 +32,7 @@ struct FileMetaData {
   InternalKey smallest;  // Smallest internal key served by table
   InternalKey largest;   // Largest internal key served by table
   int num_keys;
+  int invalid_count;
 };
 
 class VersionEdit {
@@ -99,6 +102,10 @@ class VersionEdit {
     deleted_vfiles_.insert(std::make_pair(level, file));
   }
 
+  void AddDependency(uint64_t parent, uint64_t child) {
+    dep_.SetParent(parent, child);
+  }
+
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
 
@@ -127,6 +134,7 @@ class VersionEdit {
   DeletedFileSet deleted_vfiles_;
   std::vector<std::pair<int, FileMetaData> > new_files_;
   std::vector<std::pair<int, FileMetaData> > new_vfiles_;
+  doux::Dependency dep_;
 };
 
 }  // namespace leveldb

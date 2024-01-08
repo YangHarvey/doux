@@ -43,7 +43,10 @@ namespace adgMod {
     uint64_t block_num_entries = 0;
     uint64_t block_size = 0;
     uint64_t entry_size = 0;
-
+    uint64_t max_merged_size = 2 * 1024 * 1024;
+    uint64_t file_amount_allowed = 10;
+    uint64_t level_compaction_limit = 100;
+    uint64_t invalid_limit = 10;
 
     vector<Counter> levelled_counters(12);
     vector<vector<Event*>> events(3);

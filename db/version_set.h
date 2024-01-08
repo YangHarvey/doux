@@ -27,6 +27,7 @@
 #include "leveldb/table.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
+#include "impl/dependency.h"
 
 namespace leveldb {
 
@@ -61,6 +62,20 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
+enum SaverState {
+  kNotFound,
+  kFound,
+  kDeleted,
+  kCorrupt,
+};
+
+struct Saver {
+  SaverState state;
+  const Comparator* ucmp;
+  Slice user_key;
+  std::string* value;
+};
+
 class Version {
  public:
   // Lookup the value for key.  If found, store it in *val and
@@ -82,6 +97,10 @@ class Version {
   Status GetFromVFile(const ReadOptions&, const LookupKey& key, std::string* val,
                       uint64_t file_number, uint64_t file_size, uint32_t block_number,
                       uint32_t block_offset, GetStats* stats);
+  
+  Status GetFromMergedVFile(const ReadOptions&, const LookupKey& key, std::string* val,
+                            uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                            uint32_t block_offset, GetStats* stats);
 
   
   // Adds "stats" into the current state.  Returns true if a new
@@ -199,6 +218,8 @@ public:
   std::vector<std::shared_ptr<adgMod::LearnedIndexData>> learned_index_data_;
   std::map<int, std::shared_ptr<adgMod::LearnedIndexData>> file_learned_index_data_;
   std::unordered_map<uint64_t, Table*> vtables_;
+  std::unordered_map<uint64_t, FileMetaData*> vfile_map;
+  doux::Dependency dep_;
 };
 
 class VersionSet {
@@ -243,6 +264,7 @@ class VersionSet {
 
   // Return the number of Table files at the specified level.
   int NumLevelFiles(int level) const;
+  int NumLevelVFiles(int level) const;
 
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
@@ -271,6 +293,7 @@ class VersionSet {
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the compaction.  Caller should delete the result.
   Compaction* PickCompaction();
+  Compaction* PickVCompaction();
 
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns nullptr if there is nothing in that
@@ -296,6 +319,7 @@ class VersionSet {
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
   void AddLiveFiles(std::set<uint64_t>* live);
+  void AddLiveVFiles(std::set<uint64_t>* vlive);
 
   // Return the approximate offset in the database of the data for
   // "key" as of version "v".
@@ -428,12 +452,17 @@ class Compaction {
   VersionEdit edit_;
 
  public:
+  static uint64_t merge_num_;
+
   // Each compaction reads inputs from "level_" and "level_+1"
   std::vector<FileMetaData*> inputs_[2];  // The two sets of inputs
   std::vector<FileMetaData*> vinputs_[2];
 
   std::unordered_set<Slice, HashSlice> key_set_;
   std::vector<std::pair<Slice, VInfo>> pending_kvs_;
+
+  std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>, HashSlice> key_map_;
+  std::vector<std::pair<Slice, Slice>> kvs_;
 
  private:
   // State used to check for number of overlapping grandparent files

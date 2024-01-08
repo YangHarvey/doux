@@ -74,6 +74,12 @@ static bool VCompare(const std::pair<Slice, VInfo>& p1, const std::pair<Slice, V
   return VKSliceCompare(s1, s2);
 }
 
+static bool VKCompare(const std::pair<Slice, Slice>& p1, const std::pair<Slice, Slice>& p2) {
+  const Slice& s1 = p1.first;
+  const Slice& s2 = p2.first;
+  return VKSliceCompare(s1, s2);
+}
+
 // Build a Table file from the contents of *iter.  The generated file
 // will be named according to meta->number.  On success, the rest of
 // *meta will be filled with metadata about the generated table.

@@ -347,6 +347,56 @@ Status Table::InternalVGet(const ReadOptions& options, const Slice& k, void* arg
   return s;
 }
 
+Status Table::MergedVGet(const ReadOptions& options, const Slice& k, void* arg,
+                         void (*handle_result)(void*, const Slice&, const Slice&),
+                         uint32_t block_number, uint32_t block_offset) {
+  adgMod::Stats* instance = adgMod::Stats::GetInstance();
+  Status s;
+  Saver* saver = reinterpret_cast<Saver*>(arg);
+  Iterator* iiter = rep_->index_block->NewIterator(VKeyComparator());
+
+#ifdef INTERNAL_TIMER
+  instance->StartTimer(2);
+#endif
+  // iiter->Seek(k);
+  iiter->SeekToFirst();
+  for (uint32_t i = 0; i < block_number; ++i) {
+    iiter->Next();
+  }
+#ifdef INTERNAL_TIMER
+  instance->PauseTimer(2);
+#endif
+
+  if (iiter->Valid()) {
+#ifdef INTERNAL_TIMER
+      instance->StartTimer(5);
+#endif
+      Iterator* block_iter = VBlockReader(this, options, iiter->value());
+#ifdef INTERNAL_TIMER
+      instance->PauseTimer(5);
+      instance->StartTimer(3);
+#endif
+      for (block_iter->SeekToFirst(); block_iter->Valid(); block_iter->Next()) {
+        (*handle_result)(arg, block_iter->key(), block_iter->value());
+        if (saver->state == kFound) {
+          break;
+        }
+      }
+      s = block_iter->status();
+      delete block_iter;
+#ifdef INTERNAL_TIMER
+      instance->PauseTimer(3);
+#endif
+  }
+
+  if (s.ok()) {
+    s = iiter->status();
+    saver->state = kFound;
+  }
+  delete iiter;
+  return s;
+}
+
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   Iterator* index_iter =
       rep_->index_block->NewIterator(rep_->options.comparator);

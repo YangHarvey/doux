@@ -160,14 +160,20 @@ private:
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void CleanupVCompaction(CompactionState* compact)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   inline Slice ConstructSlice(const Slice& from, Arena* arena);
   Status DoCompactionWork(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  Status DoVCompactionWork(CompactionState* compact)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
+  Status OpenCompactionVOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status FinishCompactionVOutputFile(CompactionState* compact, Iterator* input, 
                                      std::vector<std::pair<Slice, VInfo>>& sorted_values);
+  Status FinishCompactionVOutputFile(CompactionState* compact);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -211,6 +217,7 @@ private:
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_ GUARDED_BY(mutex_);
+  std::set<uint64_t> pending_voutputs_ GUARDED_BY(mutex_);
 
   // Has a background compaction been scheduled or is running?
   bool background_compaction_scheduled_ GUARDED_BY(mutex_);
@@ -219,7 +226,6 @@ private:
   
 public:
   VersionSet* const versions_;
-  doux::Dependency dep;
 
 private:
 

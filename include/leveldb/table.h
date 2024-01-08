@@ -100,6 +100,9 @@ public:
   Status InternalVGet(const ReadOptions&, const Slice& key, void* arg,
                       void (*handle_result)(void* arg, const Slice& k, const Slice& v),
                       uint32_t block_number, uint32_t block_offset);
+  Status MergedVGet(const ReadOptions&, const Slice& key, void* arg,
+                    void (*handle_result)(void* arg, const Slice& k, const Slice& v),
+                    uint32_t block_number, uint32_t block_offset);
 
 private:
   void ReadMeta(const Footer& footer);

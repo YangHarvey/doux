@@ -62,6 +62,10 @@ namespace adgMod {
     extern uint64_t block_num_entries;
     extern uint64_t block_size;
     extern uint64_t entry_size;
+    extern uint64_t max_merged_size;
+    extern uint64_t file_amount_allowed;
+    extern uint64_t level_compaction_limit;
+    extern uint64_t invalid_limit;
 
     extern vector<Counter> levelled_counters;
     extern vector<vector<Event*>> events;

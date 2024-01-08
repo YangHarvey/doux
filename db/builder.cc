@@ -41,6 +41,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     s = builder->Finish();
     if (s.ok()) {
       meta->file_size = builder->FileSize();
+      meta->num_keys = builder->NumEntries();
       assert(meta->file_size > 0);
     }
     delete builder;
@@ -151,6 +152,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     s = builder->Finish();
     if (s.ok()) {
       vmeta->file_size = builder->FileSize();
+      vmeta->num_keys = builder->NumEntries();
       for (auto& kv : kvs) {
         kv.second.file_size = static_cast<uint32_t>(vmeta->file_size);
       }
@@ -220,6 +222,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     s = builder->Finish();
     if (s.ok()) {
       meta->file_size = builder->FileSize();
+      meta->num_keys = builder->NumEntries();
       assert(meta->file_size > 0);
     }
     delete builder;

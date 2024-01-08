@@ -229,8 +229,8 @@ int main(int argc, char *argv[]) {
             cout << "Put Complete" << endl;
 
             keys.clear();
-            if (print_file_info && iteration == 0) db->PrintFileInfo();
             adgMod::db->WaitForBackground();
+            if (print_file_info && iteration == 0) db->PrintFileInfo();
             delete db;
             
             // Prepare keys for later workloads

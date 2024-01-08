@@ -24,7 +24,8 @@ enum Tag {
   // For seperated values
   kCompactVPointer = 10,
   kDeletedVFile = 11,
-  kNewVFile = 12
+  kNewVFile = 12,
+  kDependency = 13
 };
 
 void VersionEdit::Clear() {
@@ -111,6 +112,12 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutLengthPrefixedSlice(dst, f.smallest.Encode());
     PutLengthPrefixedSlice(dst, f.largest.Encode());
   }
+
+  for (const auto& it : dep_.dep_map_) {
+    PutVarint32(dst, kDependency);
+    PutVarint64(dst, it.first);
+    PutVarint64(dst, it.second);
+  }
 }
 
 static bool GetInternalKey(Slice* input, InternalKey* dst) {
@@ -145,6 +152,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   FileMetaData f;
   Slice str;
   InternalKey key;
+  uint64_t parent, child;
 
   while (msg == nullptr && GetVarint32(&input, &tag)) {
     switch (tag) {
@@ -240,6 +248,14 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           new_vfiles_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-vfile entry";
+        }
+        break;
+
+      case kDependency:
+        if (GetVarint64(&input, &child) && GetVarint64(&input, &parent)) {
+          dep_.SetParent(parent, child);
+        } else {
+          msg = "dependency";
         }
         break;
 

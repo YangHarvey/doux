@@ -2,42 +2,42 @@
 #define DOUX_DEPENDENCY_H
 
 #include <unordered_map>
+#include <iostream>
 
 namespace doux {
 
-class Dependency {
-public:
+struct Dependency {
     Dependency() {}
 
-    uint64_t Find(uint64_t num) {
-        if (parent.find(num) == parent.end()) {
-            parent[num] = num;
+    uint64_t FindParent(uint64_t child) {
+        if (dep_map_.find(child) == dep_map_.end()) {
+            dep_map_[child] = child;
         }
 
-        if (parent[num] != num) {
-            parent[num] = Find(parent[num]);
+        if (dep_map_[child] != child) {
+            dep_map_[child] = FindParent(dep_map_[child]);
         }
 
-        return parent[num];
+        return dep_map_[child];
     }
 
-    bool IsSameSet(uint64_t num1, uint64_t num2) {
-        return parent[num1] == parent[num2];
-    }
-
-    void Union(uint64_t num1, uint64_t num2) {
-        uint64_t root1 = Find(num1);
-        uint64_t root2 = Find(num2);
+    void SetParent(uint64_t parent, uint64_t child) {
+        uint64_t root1 = FindParent(parent);
+        uint64_t root2 = FindParent(child);
 
         if (root1 == root2) {
             return;
         }
-
-        parent[root2] = root1;
+        dep_map_[root2] = root1;
     }
 
-private:
-    std::unordered_map<uint64_t, uint64_t> parent;
+    void PrintAll() {
+        for (const auto& it : dep_map_) {
+            std::cout << "Dep: " << it.first << " -> " <<  it.second << std::endl;
+        }
+    }
+
+    std::unordered_map<uint64_t, uint64_t> dep_map_;
 };
 
 }
