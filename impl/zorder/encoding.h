@@ -24,7 +24,9 @@ struct MortonCode<2, 32> {
     static constexpr uint32_t dimension_ = 2;
     static constexpr uint32_t max_level_ = 32;
 
-    MortonCode<2, 32>(uint64_t data) : data_(data) {};
+    MortonCode<2, 32>() : data_(0) {}
+    
+    MortonCode<2, 32>(uint64_t data) : data_(data) {}
 
     operator uint64_t() const {
         return data_;

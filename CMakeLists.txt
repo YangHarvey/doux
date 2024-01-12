@@ -12,7 +12,7 @@ set(CMAKE_C_STANDARD_REQUIRED OFF)
 set(CMAKE_C_EXTENSIONS OFF)
 
 # This project requires C++11.
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -216,6 +216,9 @@ target_sources(leveldb
     "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.h"
     "${PROJECT_SOURCE_DIR}/impl/zorder/util.h"
     "${PROJECT_SOURCE_DIR}/impl/zorder/encoding.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/interval.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/region.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/aabb.h"
     "${PROJECT_SOURCE_DIR}/impl/dependency.h"
 
 
@@ -390,6 +393,8 @@ if(LEVELDB_BUILD_TESTS)
     leveldb_test("${PROJECT_SOURCE_DIR}/mod/read.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/mod/read_cold.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench.cc")
+
 
     # TODO(costan): This test also uses
     #               "${PROJECT_SOURCE_DIR}/util/env_{posix|windows}_test_helper.h"

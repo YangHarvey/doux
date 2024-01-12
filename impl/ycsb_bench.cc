@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
             ("x,dummy", "dummy option")
             ("t,load_type", "load type", cxxopts::value<int>(load_type)->default_value("0"))
             ("filter", "use filter", cxxopts::value<bool>(adgMod::use_filter)->default_value("false"))
-            ("range", "use range query and specify length", cxxopts::value<int>(length_range)->default_value("10"));
+            ("range", "use range query and specify length", cxxopts::value<int>(length_range)->default_value("100"));
 
     auto result = commandline_options.parse(argc, argv);
     if (result.count("help")) {
@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
             string command = "rm -rf " + db_location;
             system(command.c_str());
             system("sudo fstrim -a -v");
-            system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
+            // system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
 
             status = DB::Open(options, db_location, &db);
             assert(status.ok() && "Open Error");
@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (evict) {
-            system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
+            // system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
         }
 
         cout << "Starting up" << endl;

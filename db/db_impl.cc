@@ -938,7 +938,7 @@ void DBImpl::BackgroundCompaction() {
     instance->StartTimer(7);
     Compaction* vc = versions_->PickVCompaction();
 
-    if (vc != nullptr) {
+    if (vc != nullptr && (vc->num_input_vfiles(0) > 0 || vc->num_input_vfiles(1) > 0)) {
       CompactionState* compact = new CompactionState(vc);
       status = DoVCompactionWork(compact);
       if (!status.ok()) {
@@ -1480,10 +1480,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       for (int i = 0; i < pending_kvs.size(); i++) {
         sorted_values.emplace_back(pending_kvs[i]);
         curr_size += sorted_values[sorted_values.size() - 1].second.value.size();
-        curr_size += (adgMod::key_size + sizeof(uint64_t));
+        curr_size += (adgMod::key_size + sizeof(uint64_t) + adgMod::value_size);
 
         // Generate value/key tables
-        if (curr_size >= max_value_file_size) {
+        if (curr_size >= max_value_file_size || i == pending_kvs.size() - 1) {
           std::sort(sorted_values.begin(), sorted_values.end(), VCompare);
           if (compact->builder == nullptr) {
             status = OpenCompactionOutputFile(compact);
@@ -1661,7 +1661,7 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
       Slice vkey(ikey.user_key.data(), ikey.user_key.size() + 16);
       kvs.push_back({vkey, map_it.second.second});
     }
-  } 
+  }
 
   status = OpenCompactionVOutputFile(compact);
   if (!status.ok()) {
@@ -1743,6 +1743,26 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
   return internal_iter;
 }
 
+Iterator* DBImpl::NewVInternalIterator(const ReadOptions& options,
+                                       SequenceNumber* latest_snapshot,
+                                       uint32_t* seed) {
+  mutex_.Lock();
+  *latest_snapshot = versions_->LastSequence();
+
+  std::vector<Iterator*> list;
+  versions_->current()->AddVIterators(options, &list);
+  Iterator* internal_iter = 
+      NewVMergingIterator(options, &internal_comparator_, &list[0], list.size());
+  versions_->current()->Ref();
+
+  IterState* cleanup = new IterState(&mutex_, mem_, imm_, versions_->current());
+  internal_iter->RegisterCleanup(CleanupIteratorState, cleanup, nullptr);
+
+  *seed = ++seed_;
+  mutex_.Unlock();
+  return internal_iter;
+}
+
 Iterator* DBImpl::TEST_NewInternalIterator() {
   SequenceNumber ignored;
   uint32_t ignored_seed;
@@ -1777,7 +1797,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   current->Ref();
 
   bool have_stat_update = false;
-  Version::GetStats stats;
+  GetStats stats;
 
   // Unlock while reading from files and memtables
   {
@@ -1828,7 +1848,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         uint32_t file_size = DecodeFixed32(value->c_str() + sizeof(uint32_t));
         uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
         uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 3);
-        s = current->GetFromVFile(options, lkey, value, file_number, file_size,
+        current->GetFromVFile(options, lkey, value, file_number, file_size,
                                   block_number, block_offset, &stats);
         
 #ifdef INTERNAL_TIMER
@@ -1845,10 +1865,10 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         if (current->dep_.FindParent(file_number) != 0) {
           file_number = current->dep_.FindParent(file_number);
           file_size = static_cast<uint32_t>(versions_->current()->vfile_map[file_number]->file_size);
-          s = current->GetFromMergedVFile(options, lkey, value, file_number, file_size,
+          current->GetFromMergedVFile(options, lkey, value, file_number, file_size,
                                           block_number, block_offset, &stats);
         } else {
-          s = current->GetFromVFile(options, lkey, value, file_number, file_size,
+          current->GetFromVFile(options, lkey, value, file_number, file_size,
                                     block_number, block_offset, &stats);
         }
 #ifdef INTERNAL_TIMER
@@ -1868,10 +1888,101 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   return s;
 }
 
+void DBImpl::Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
+                  uint64_t length_range, std::vector<std::string>& res) {
+  adgMod::Stats* instance = adgMod::Stats::GetInstance();
+  
+  MutexLock l(&mutex_);
+  SequenceNumber snapshot;
+  if (options.snapshot != nullptr) {
+    snapshot =
+        static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
+  } else {
+    snapshot = versions_->LastSequence();
+  }
+
+  Version* current = versions_->current();
+  current->Ref();
+
+  GetStats stats;
+
+  {
+    mutex_.Unlock();
+    LookupKey lkey(key, snapshot);
+
+    for (int i = 0; i < values.size(); i++) {
+      string cur_res;
+      if (adgMod::MOD == 8) {
+#ifdef INTERNAL_TIMER
+        instance->StartTimer(12);
+#endif  
+        uint64_t value_address = DecodeFixed64(values[i].data());
+        uint32_t value_size = DecodeFixed32(values[i].data() + sizeof(uint64_t));
+        cur_res = std::move(vlog->ReadRecord(value_address, value_address));
+        res.push_back(cur_res);
+#ifdef INTERNAL_TIMER
+        instance->PauseTimer(12);
+#endif
+      } else if (adgMod::MOD == 9) {
+#ifdef INTERNAL_TIMER
+        instance->StartTimer(12);
+#endif  
+        uint32_t file_number = DecodeFixed32(values[i].data());
+        uint32_t file_size = DecodeFixed32(values[i].data() + sizeof(uint32_t));
+        uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
+        uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 3);
+        current->GetFromVFile(options, lkey, &cur_res, file_number, file_size,
+                              block_number, block_offset, &stats);
+        res.push_back(cur_res);
+#ifdef INTERNAL_TIMER
+        instance->PauseTimer(12);
+#endif
+      } else if (adgMod::MOD == 10) {
+#ifdef INTERNAL_TIMER
+        instance->StartTimer(12);
+#endif
+        uint32_t file_number = DecodeFixed32(values[i].data());
+        uint32_t file_size = DecodeFixed32(values[i].data() + sizeof(uint32_t));
+        uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
+        uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 3);
+        if (current->dep_.FindParent(file_number) != 0) {
+          file_number = current->dep_.FindParent(file_number);
+          file_size = static_cast<uint32_t>(versions_->current()->vfile_map[file_number]->file_size);
+          current->GetFromMergedVFile(options, lkey, &cur_res, file_number, file_size,
+                                      block_number, block_offset, &stats);
+        } else {
+          current->GetFromVFile(options, lkey, &cur_res, file_number, file_size,
+                                block_number, block_offset, &stats);
+        }
+        res.push_back(cur_res);
+#ifdef INTERNAL_TIMER
+        instance->PauseTimer(12);
+#endif
+      }
+    }
+
+    mutex_.Lock();
+  }
+
+  current->Unref();
+}
+
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
   uint32_t seed;
   Iterator* iter = NewInternalIterator(options, &latest_snapshot, &seed);
+  return NewDBIterator(this, user_comparator(), iter,
+                       (options.snapshot != nullptr
+                            ? static_cast<const SnapshotImpl*>(options.snapshot)
+                                  ->sequence_number()
+                            : latest_snapshot),
+                       seed);
+}
+
+Iterator* DBImpl::NewVIterator(const ReadOptions& options) {
+  SequenceNumber latest_snapshot;
+  uint32_t seed;
+  Iterator* iter = NewVInternalIterator(options, &latest_snapshot, &seed);
   return NewDBIterator(this, user_comparator(), iter,
                        (options.snapshot != nullptr
                             ? static_cast<const SnapshotImpl*>(options.snapshot)

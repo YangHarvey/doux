@@ -161,6 +161,11 @@ struct LEVELDB_EXPORT ReadOptions {
   // not have been released).  If "snapshot" is null, use an implicit
   // snapshot of the state at the beginning of this read operation.
   const Snapshot* snapshot = nullptr;
+
+  uint32_t start1 = 0, end1 = -1;
+  uint32_t start2 = 0, end2 = -1; 
+
+  uint64_t start = 0, end = -1;
 };
 
 // Options that control write operations

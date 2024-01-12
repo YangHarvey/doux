@@ -5,6 +5,8 @@
 #ifndef STORAGE_LEVELDB_TABLE_MERGER_H_
 #define STORAGE_LEVELDB_TABLE_MERGER_H_
 
+#include "leveldb/options.h"
+
 namespace leveldb {
 
 class Comparator;
@@ -20,6 +22,9 @@ class Iterator;
 // REQUIRES: n >= 0
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
                              int n);
+
+Iterator* NewVMergingIterator(const ReadOptions& options, const Comparator* comparator,
+                              Iterator** children, int n);
 
 }  // namespace leveldb
 

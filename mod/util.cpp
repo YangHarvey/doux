@@ -43,8 +43,8 @@ namespace adgMod {
     uint64_t block_num_entries = 0;
     uint64_t block_size = 0;
     uint64_t entry_size = 0;
-    uint64_t max_merged_size = 2 * 1024 * 1024;
-    uint64_t file_amount_allowed = 10;
+    uint64_t max_merged_size = 64 * 1024 * 1024;
+    uint64_t small_file_allowed = 10;
     uint64_t level_compaction_limit = 100;
     uint64_t invalid_limit = 10;
 
@@ -88,6 +88,11 @@ namespace adgMod {
     string generate_value(uint64_t value) {
         string value_string = to_string(value);
         string result = string(value_size - value_string.length(), '0') + value_string;
+        return std::move(result);
+    }
+
+    string fill_value(const string& value, size_t sz) {
+        string result = string(sz - value.length(), '0') + value;
         return std::move(result);
     }
 

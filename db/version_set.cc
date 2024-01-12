@@ -264,6 +264,62 @@ void Version::AddIterators(const ReadOptions& options,
   }
 }
 
+void Version::AddVIterators(const ReadOptions& options,
+                            std::vector<Iterator*>* iters) {
+  for (size_t i = 0; i < vfiles_[0].size(); i++) {
+    FileMetaData* vf = vfiles_[0][i];
+    Iterator* it;
+    if (vtables_.find(vf->number) == vtables_.end()) {
+      std::string vfname = VTableFileName(vset_->dbname_, vf->number);
+      RandomAccessFile* file = nullptr;
+      Table* table = nullptr;
+      Status s = vset_->env_->NewRandomAccessFile(vfname, &file);
+      if (s.ok()) {
+        s = Table::Open(*(vset_->options_), file, vf->file_size, &table);
+        vtables_[vf->number] = table;
+        it = table->NewVIterator(options);
+      }
+    } else {
+      it = vtables_[vf->number]->NewVIterator(options);
+    }
+    assert(it != nullptr);
+    iters->push_back(it);
+  }
+
+  int max_level = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+  const Comparator* vkcmp = VKeyComparator();
+  for (int level = 1; level < max_level; level++) {
+    for (int i = 0; i < vfiles_[level].size(); i++) {
+      FileMetaData* vf = vfiles_[level][i];
+      if (adgMod::MOD == 10) {
+        ParsedInternalKey iSmallest, iLargest;
+        ParseInternalVKey(vf->smallest.Encode(), &iSmallest);
+        ParseInternalVKey(vf->largest.Encode(), &iLargest);
+        if (options.start > iLargest.sort_key || options.end < iSmallest.sort_key) {
+          continue;
+        }
+      }
+
+      Iterator* it;
+      if (vtables_.find(vf->number) == vtables_.end()) {
+        std::string vfname = VTableFileName(vset_->dbname_, vf->number);
+        RandomAccessFile* file = nullptr;
+        Table* table = nullptr;
+        Status s = vset_->env_->NewRandomAccessFile(vfname, &file);
+        if (s.ok()) {
+          s = Table::Open(*(vset_->options_), file, vf->file_size, &table);
+          vtables_[vf->number] = table;
+          it = table->NewVIterator(options);
+        }
+      } else {
+        it = vtables_[vf->number]->NewVIterator(options);
+      }
+      assert(it != nullptr);
+      iters->push_back(it);
+    }
+  }
+}
+
 // Callback from TableCache::Get()
 
 static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
@@ -851,15 +907,11 @@ class VersionSet::Builder {
       levels_[level].added_files = new FileSet(cmp);
     }
     
-    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-      if (adgMod::MOD == 10) {
-        cmp.internal_comparator = VKeyComparator();
-      }
-      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
-      vlevels_.resize(sz);
-      for (int level = 0; level < sz; level++) {
-        vlevels_[level].added_files = new FileSet(cmp);
-      }
+    cmp.internal_comparator = adgMod::MOD == 10 ? VKeyComparator() : &vset_->icmp_;
+    size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    vlevels_.resize(sz);
+    for (int level = 0; level < sz; level++) {
+      vlevels_[level].added_files = new FileSet(cmp);
     }
   }
 
@@ -883,7 +935,7 @@ class VersionSet::Builder {
     }
 
     if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+      size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
       for (int level = 0; level < sz; level++) {
         const FileSet* added = vlevels_[level].added_files;
         std::vector<FileMetaData*> to_unref;
@@ -1029,7 +1081,7 @@ class VersionSet::Builder {
       if (adgMod::MOD == 10) {
         cmp.internal_comparator = VKeyComparator();
       }
-      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
+      size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
       for (int level = 0; level < sz; level++) {
         const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
         std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
@@ -1084,7 +1136,7 @@ class VersionSet::Builder {
     } else {
       std::vector<FileMetaData*>* files = &v->vfiles_[level];
       if (level > 0 && !files->empty()) {
-        const Comparator* cmp = adgMod::MOD == 9 ? &vset_->icmp_ : VKeyComparator();
+        const Comparator* cmp = adgMod::MOD == 10 ? VKeyComparator() : &vset_->icmp_;
         assert(cmp->Compare((*files)[files->size() - 1]->largest, f->smallest) < 0);
       }
       f->refs++;
@@ -1111,10 +1163,8 @@ VersionSet::VersionSet(const std::string& dbname, const Options* options,
       descriptor_log_(nullptr),
       dummy_versions_(this),
       current_(nullptr) {
-  if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-    size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
-    compact_vpointers_.resize(sz);
-  }
+  size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+  compact_vpointers_.resize(sz);
   AppendVersion(new Version(this));
 }
 
@@ -1520,7 +1570,7 @@ int VersionSet::NumLevelFiles(int level) const {
 
 int VersionSet::NumLevelVFiles(int level) const {
   assert(level >= 0);
-  assert(level <= adgMod::MOD == 9 ? config::kNumLevels : 2);
+  assert(level <= adgMod::MOD == 10 ? 2 : config::kNumLevels);
   return current_->vfiles_[level].size();
 }
 
@@ -1582,7 +1632,7 @@ void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
 void VersionSet::AddLiveVFiles(std::set<uint64_t>* vlive) {
   for (Version* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
-    int max_level = adgMod::MOD == 9 ? config::kNumLevels : 2;
+    int max_level = adgMod::MOD == 10 ? 2 : config::kNumLevels;
     for (int level = 0; level < max_level; level++) {
       const std::vector<FileMetaData*>& vfiles = v->vfiles_[level];
       for (size_t i = 0; i < vfiles.size(); i++) {
@@ -1739,8 +1789,15 @@ Compaction* VersionSet::PickCompaction() {
 
 Compaction* VersionSet::PickVCompaction() {
   Compaction* c;
-  const bool level_compaction = (Compaction::merge_num_ % adgMod::level_compaction_limit == 0);
-  const bool size_compaction = (current_->vfiles_[0].size() >= adgMod::file_amount_allowed);
+  // const bool level_compaction = (Compaction::merge_num_ % adgMod::level_compaction_limit == 0);
+  const bool level_compaction = false;
+  int cur_small_file = 0;
+  for (int i = 0; i < current_->vfiles_[0].size(); i++) {
+    if (current_->vfiles_[0][i]->file_size < adgMod::max_merged_size) {
+      cur_small_file++;
+    }
+  }
+  const bool size_compaction = (cur_small_file >= adgMod::small_file_allowed);
   if (level_compaction) {
     c = new Compaction(options_, 0);
     assert(current_->vfiles_[0].size() > 0);
@@ -1756,7 +1813,9 @@ Compaction* VersionSet::PickVCompaction() {
       if (vkcmp->Compare(f->largest, largest) > 0) {
         largest = f->largest;
       }
-      c->vinputs_[0].push_back(f);
+      if (f->file_size < adgMod::max_merged_size) {
+        c->vinputs_[0].push_back(f);
+      }
     }
     for (size_t i = 0; i < current_->vfiles_[1].size(); ++i) {
       FileMetaData* f = current_->vfiles_[1][i];
@@ -1780,7 +1839,9 @@ Compaction* VersionSet::PickVCompaction() {
     c = new Compaction(options_, 0);
     for (size_t i = 0; i < current_->vfiles_[0].size(); ++i) {
       FileMetaData* f = current_->vfiles_[0][i];
-      c->vinputs_[0].push_back(f);
+      if (f->file_size < adgMod::max_merged_size) {
+        c->vinputs_[0].push_back(f);
+      }
     }
     Compaction::merge_num_++;
   } else {
@@ -1789,7 +1850,7 @@ Compaction* VersionSet::PickVCompaction() {
       FileMetaData* f = current_->vfiles_[0][i];
       uint64_t sz = adgMod::key_size + adgMod::value_size + 16;
       if (100 * f->invalid_count / (f->file_size / sz) > adgMod::invalid_limit
-          && f->file_size / 1024 < adgMod::max_merged_size) {
+          && f->file_size < adgMod::max_merged_size) {
         files_to_compact.push_back(f);
       }
     }
@@ -2020,7 +2081,7 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
 }
 
 void Compaction::AddVInputDeletions(VersionEdit* edit) {
-  int cur_level = adgMod::MOD == 9 ? level_ : 0;
+  int cur_level = adgMod::MOD == 10 ? 0 : level_;
   for (int which = 0; which < 2; which++) {
     for (size_t i = 0; i < vinputs_[which].size(); i++) {
       edit->DeleteVFile(cur_level + which, vinputs_[which][i]->number);
@@ -2098,7 +2159,7 @@ void Version::PrintAll() const {
     }
 
     printf("\n");
-    int levels = adgMod::MOD == 9 ? config::kNumLevels : 2;
+    int levels = adgMod::MOD == 10 ? 2 : config::kNumLevels;
     for (int i = 0 ; i < levels; ++i) {
       for (int j = 0; j < vfiles_[i].size(); ++j) {
         if (j == 0) printf("Level %d\n", i);

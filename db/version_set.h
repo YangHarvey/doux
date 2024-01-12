@@ -27,6 +27,7 @@
 #include "leveldb/table.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
+#include "impl/zorder/encoding.h"
 #include "impl/dependency.h"
 
 namespace leveldb {
@@ -76,23 +77,27 @@ struct Saver {
   std::string* value;
 };
 
+struct GetStats {
+  FileMetaData* seek_file;
+  int seek_file_level;
+};
+
 class Version {
  public:
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
-  struct GetStats {
-    FileMetaData* seek_file;
-    int seek_file_level;
-  };
 
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
+  void AddVIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
+  Status Scan(const ReadOptions&, const LookupKey& key, vector<std::string>& res,
+              GetStats* stats);
 
   Status GetFromVFile(const ReadOptions&, const LookupKey& key, std::string* val,
                       uint64_t file_number, uint64_t file_size, uint32_t block_number,
@@ -174,10 +179,8 @@ class Version {
     for (int i = 0; i < config::kNumLevels; ++i) {
       learned_index_data_.push_back(std::make_shared<adgMod::LearnedIndexData>(adgMod::level_allowed_seek));
     }
-    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-      size_t sz = adgMod::MOD == 9 ? config::kNumLevels : 2;
-      vfiles_.resize(sz);
-    }
+    size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    vfiles_.resize(sz);
   }
 
   Version(const Version&) = delete;
@@ -412,10 +415,10 @@ class Compaction {
 
   uint64_t MaxValueOutputFileSize() const {
     uint64_t kv_size = adgMod::key_size + sizeof(uint64_t) 
-                     + 4 * sizeof(uint64_t);
+                     + 4 * sizeof(uint32_t);
     uint64_t value_size = adgMod::key_size + sizeof(uint64_t) 
                         + adgMod::value_size;
-    return max_output_file_size_ * value_size / kv_size;
+    return (max_output_file_size_ / kv_size) * value_size;
   }
 
   // Is this a trivial compaction that can be implemented by just

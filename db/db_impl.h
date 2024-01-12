@@ -47,7 +47,10 @@ class DBImpl : public DB {
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options, const Slice& key,
                      std::string* value);
+  virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
+                    uint64_t length_range, std::vector<std::string>& res);
   virtual Iterator* NewIterator(const ReadOptions&);
+  virtual Iterator* NewVIterator(const ReadOptions&);
   virtual const Snapshot* GetSnapshot();
   virtual void ReleaseSnapshot(const Snapshot* snapshot);
   virtual bool GetProperty(const Slice& property, std::string* value);
@@ -120,6 +123,9 @@ private:
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot,
                                 uint32_t* seed);
+  Iterator* NewVInternalIterator(const ReadOptions&,
+                                 SequenceNumber* latest_snapshot,
+                                 uint32_t* seed);            
 
   Status NewDB();
 

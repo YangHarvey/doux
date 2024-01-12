@@ -335,9 +335,9 @@ int main(int argc, char *argv[]) {
 
         cout << "Starting up" << endl;
         status = DB::Open(options, db_location, &db);
+        assert(status.ok() && "Open Error");
         adgMod::db->WaitForBackground();
         Iterator* db_iter = length_range == 0 ? nullptr : db->NewIterator(read_options);
-        assert(status.ok() && "Open Error");
 //            for (int s = 12; s < 20; ++s) {
 //                instance->ResetTimer(s);
 //            }

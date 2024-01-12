@@ -4,6 +4,7 @@
 
 #include "db/db_iter.h"
 
+#include "db/version_set.h"
 #include "db/db_impl.h"
 #include "db/dbformat.h"
 #include "db/filename.h"
@@ -81,10 +82,68 @@ class DBIter : public Iterator {
       instance->PauseTimer(12);
 #endif
       return value;
+    } else if (adgMod::MOD == 9) {
+#ifdef INTERNAL_TIMER
+      adgMod::Stats* instance = adgMod::Stats::GetInstance();
+      instance->StartTimer(12);
+#endif
+      GetStats stats;
+      SequenceNumber snapshot;
+      if (adgMod::read_options.snapshot != nullptr) {
+        snapshot =
+            static_cast<const SnapshotImpl*>(adgMod::read_options.snapshot)->sequence_number();
+      } else {
+        snapshot = adgMod::db->versions_->LastSequence();
+      }
+      LookupKey lkey(iter_->key(), snapshot);
+      uint32_t file_number = DecodeFixed32(vaddr.data());
+      uint32_t file_size = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
+      uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
+      uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 3);
+      string cur_res;
+      adgMod::db->versions_->current()->GetFromVFile(
+        adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
+#ifdef INTERNAL_TIMER
+      instance->PauseTimer(12);
+#endif
+      return cur_res;
+    } else if (adgMod::MOD == 10) {
+#ifdef INTERNAL_TIMER
+      adgMod::Stats* instance = adgMod::Stats::GetInstance();
+      instance->StartTimer(12);
+#endif
+      GetStats stats;
+      SequenceNumber snapshot;
+      if (adgMod::read_options.snapshot != nullptr) {
+        snapshot =
+            static_cast<const SnapshotImpl*>(adgMod::read_options.snapshot)->sequence_number();
+      } else {
+        snapshot = adgMod::db->versions_->LastSequence();
+      }
+      LookupKey lkey(iter_->key(), snapshot);
+      uint32_t file_number = DecodeFixed32(vaddr.data());
+      uint32_t file_size = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
+      uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
+      uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 3);
+      string cur_res;
+      if (adgMod::db->versions_->current()->dep_.FindParent(file_number) != 0) {
+        file_number = adgMod::db->versions_->current()->dep_.FindParent(file_number);
+        file_size = static_cast<uint32_t>(adgMod::db->versions_->current()->vfile_map[file_number]->file_size);
+        adgMod::db->versions_->current()->GetFromMergedVFile(
+          adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
+      } else {
+        adgMod::db->versions_->current()->GetFromVFile(
+          adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
+      }
+#ifdef INTERNAL_TIMER
+      instance->PauseTimer(12);
+#endif
+      return cur_res;
     } else {
       return vaddr;
     }
   }
+
   virtual Status status() const {
     if (status_.ok()) {
       return iter_->status();

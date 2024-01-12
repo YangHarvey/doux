@@ -63,7 +63,7 @@ namespace adgMod {
     extern uint64_t block_size;
     extern uint64_t entry_size;
     extern uint64_t max_merged_size;
-    extern uint64_t file_amount_allowed;
+    extern uint64_t small_file_allowed;
     extern uint64_t level_compaction_limit;
     extern uint64_t invalid_limit;
 
@@ -82,6 +82,7 @@ namespace adgMod {
 //bool SearchNumEntriesArray(const std::vector<uint64_t>& num_entries_array, const uint64_t position, size_t* index, uint64_t* relative_position);
     string generate_key(const string& key);
     string generate_value(uint64_t value);
+    string fill_value(const string& value, size_t sz);
     uint64_t SliceToInteger(const Slice& slice);
     int compare(const Slice& slice, const string& string);
     bool operator<(const Slice& slice, const string& string);

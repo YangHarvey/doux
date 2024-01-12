@@ -7,7 +7,8 @@
 
 #include "leveldb/status.h"
 #include "util/arena.h"
-#include "impl/zorder/encoding.h"
+#include "util/coding.h"
+#include "impl/zorder/aabb.h"
 
 namespace leveldb {
 
