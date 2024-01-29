@@ -11,7 +11,10 @@ class VLog {
 private:
     WritableFile* writer;
     RandomAccessFile* reader;
+    WritableFile* writer1;
+    RandomAccessFile* reader1;
     std::string buffer;
+    std::string buffer1;
     uint64_t vlog_size;
 
     void Flush();
@@ -22,6 +25,7 @@ public:
     std::string ReadRecord(uint64_t address, uint32_t size);
     Slice ReadRecord2(uint64_t address, uint32_t size);
     void Sync();
+    void GC();
     ~VLog();
 };
 

@@ -430,6 +430,8 @@ class Compaction {
 
   void AddVInputDeletions(VersionEdit* edit);
 
+  void MoveToNextLevel(VersionEdit* edit);
+
   // Returns true if the information we have available guarantees that
   // the compaction is producing data in "level+1" for which no data exists
   // in levels greater than "level+1".

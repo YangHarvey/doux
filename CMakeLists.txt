@@ -11,7 +11,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED OFF)
 set(CMAKE_C_EXTENSIONS OFF)
 
-# This project requires C++11.
+# This project requires C++17.
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -220,7 +220,7 @@ target_sources(leveldb
     "${PROJECT_SOURCE_DIR}/impl/zorder/region.h"
     "${PROJECT_SOURCE_DIR}/impl/zorder/aabb.h"
     "${PROJECT_SOURCE_DIR}/impl/dependency.h"
-
+    "${PROJECT_SOURCE_DIR}/impl/zipfian.h"
 
   # Only CMake 3.3+ supports PUBLIC sources in targets exported by "install".
   $<$<VERSION_GREATER:CMAKE_VERSION,3.2>:PUBLIC>

@@ -2089,6 +2089,16 @@ void Compaction::AddVInputDeletions(VersionEdit* edit) {
   }
 }
 
+void Compaction::MoveToNextLevel(VersionEdit* edit) {
+  for (int which = 0; which < 2; which++) {
+    for (size_t i = 0; i < vinputs_[which].size(); i++) {
+      FileMetaData* vf = vinputs_[which][i];
+      edit->DeleteVFile(level_, vf->number);
+      edit->AddVFile(level_ + 1, vf->number, vf->file_size, vf->smallest, vf->largest);
+    }
+  }
+}
+
 bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
   // Maybe use binary search to find right entry instead of linear search?
   const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();

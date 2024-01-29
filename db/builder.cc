@@ -130,7 +130,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       kvs.emplace_back(vkey, info);
     }
 
-    std::sort(kvs.begin(), kvs.end(), VCompare);
+    // std::sort(kvs.begin(), kvs.end(), VCompare);
 
     TableBuilder* builder = new TableBuilder(options, vfile);
     Slice min_key = kvs[0].first;
@@ -201,21 +201,37 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       return s;
     }
 
-    std::sort(kvs.begin(), kvs.end(), KCompare);
+    // std::sort(kvs.begin(), kvs.end(), KCompare);
 
     TableBuilder* builder = new TableBuilder(options, file);
-    meta->smallest.DecodeFrom(iter->key());
-    int idx = 0;
-    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-      Slice key = iter->key();
-      meta->largest.DecodeFrom(key);
+    Slice min_key = kvs[0].first;
+    Slice max_key = kvs[kvs.size() - 1].first;
+    if (adgMod::MOD == 9) {
+      min_key.remove_suffix(8);
+      max_key.remove_suffix(8);
+    }
+    meta->smallest.DecodeFrom(min_key);
+    meta->largest.DecodeFrom(max_key);
+
+    // for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    //   Slice key = iter->key();
+    //   meta->largest.DecodeFrom(key);
+    //   char buffer[sizeof(uint32_t) * 4];
+    //   EncodeFixed32(buffer, kvs[idx].second.file_number);
+    //   EncodeFixed32(buffer + sizeof(uint32_t), kvs[idx].second.file_size);
+    //   EncodeFixed32(buffer + sizeof(uint32_t) * 2, kvs[idx].second.block_number);
+    //   EncodeFixed32(buffer + sizeof(uint32_t) * 3, kvs[idx].second.block_offset);
+    //   builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 4});
+    //   ++idx;
+    // }
+
+    for (const auto& it : kvs) {
       char buffer[sizeof(uint32_t) * 4];
-      EncodeFixed32(buffer, kvs[idx].second.file_number);
-      EncodeFixed32(buffer + sizeof(uint32_t), kvs[idx].second.file_size);
-      EncodeFixed32(buffer + sizeof(uint32_t) * 2, kvs[idx].second.block_number);
-      EncodeFixed32(buffer + sizeof(uint32_t) * 3, kvs[idx].second.block_offset);
-      builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 4});
-      ++idx;
+      EncodeFixed32(buffer, it.second.file_number);
+      EncodeFixed32(buffer + sizeof(uint32_t), it.second.file_size);
+      EncodeFixed32(buffer + sizeof(uint32_t) * 2, it.second.block_number);
+      EncodeFixed32(buffer + sizeof(uint32_t) * 3, it.second.block_offset);
+      builder->Add(it.first, (Slice) {buffer, sizeof(uint32_t) * 4});
     }
 
     // Finish and check for builder errors

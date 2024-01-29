@@ -34,7 +34,7 @@ namespace adgMod {
 
     int file_allowed_seek = 10;
     int level_allowed_seek = 1;
-    float reference_frequency = 2.6;
+    float reference_frequency = 2.2;
     bool block_num_entries_recorded = true;
     bool level_learning_enabled = false;
     bool file_learning_enabled = false;
@@ -43,8 +43,8 @@ namespace adgMod {
     uint64_t block_num_entries = 0;
     uint64_t block_size = 0;
     uint64_t entry_size = 0;
-    uint64_t max_merged_size = 64 * 1024 * 1024;
-    uint64_t small_file_allowed = 10;
+    uint64_t max_merged_size = 128 * 1024 * 1024;
+    uint64_t small_file_allowed = 20;
     uint64_t level_compaction_limit = 100;
     uint64_t invalid_limit = 10;
 

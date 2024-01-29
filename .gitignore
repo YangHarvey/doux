@@ -1,3 +1,6 @@
 .vscode/
 build/
 evaluation/
+eval/
+eval_micro/
+eval_ycsb/

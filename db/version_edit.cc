@@ -117,6 +117,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32(dst, kDependency);
     PutVarint64(dst, it.first);
     PutVarint64(dst, it.second);
+    // std::cout << "Dependency: {child: " << it.first << " -> parent: " << it.second << "}" << std::endl;
   }
 }
 
@@ -254,6 +255,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
       case kDependency:
         if (GetVarint64(&input, &child) && GetVarint64(&input, &parent)) {
           dep_.SetParent(parent, child);
+          std::cout << "Decode dependency: {child: " << child << " -> parent: " << parent << "}" << std::endl;
         } else {
           msg = "dependency";
         }
