@@ -1141,7 +1141,7 @@ class VersionSet::Builder {
       }
       f->refs++;
       files->push_back(f);
-      v->vfile_map[f->number] = f;
+      v->vfile_map_[f->number] = f;
     }
   }
 };
@@ -1200,9 +1200,8 @@ void VersionSet::AppendVersion(Version* v) {
     FileMetaData* vf = v->vfiles_[0][0];
     if (vf) {
       EncodeFixed32(default_value_, vf->number);
-      EncodeFixed32(default_value_ + sizeof(uint32_t), vf->file_size);
+      EncodeFixed32(default_value_ + sizeof(uint32_t), 0);
       EncodeFixed32(default_value_ + sizeof(uint32_t) * 2, 0);
-      EncodeFixed32(default_value_ + sizeof(uint32_t) * 3, 0);
     }
   }
 }

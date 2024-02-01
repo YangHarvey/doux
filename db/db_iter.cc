@@ -128,7 +128,7 @@ class DBIter : public Iterator {
       string cur_res;
       if (adgMod::db->versions_->current()->dep_.FindParent(file_number) != 0) {
         file_number = adgMod::db->versions_->current()->dep_.FindParent(file_number);
-        file_size = static_cast<uint32_t>(adgMod::db->versions_->current()->vfile_map[file_number]->file_size);
+        file_size = static_cast<uint32_t>(adgMod::db->versions_->current()->vfile_map_[file_number]->file_size);
         adgMod::db->versions_->current()->GetFromMergedVFile(
           adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
       } else {

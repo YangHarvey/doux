@@ -23,7 +23,6 @@ class VersionEdit;
 struct VInfo {
     Slice value;
     uint32_t file_number;
-    uint32_t file_size;
     uint32_t block_number;
     uint32_t block_offset;
 };
@@ -90,7 +89,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
                   TableCache* table_cache, Iterator* iter, FileMetaData* meta);
 Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
                     TableCache* table_cache, Iterator* iter, FileMetaData* meta,
-                    Iterator* viter, FileMetaData* vmeta, Arena* arena);
+                    FileMetaData* vmeta, Arena* arena);
 
 }  // namespace leveldb
 

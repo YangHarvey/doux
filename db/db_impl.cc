@@ -547,7 +547,6 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   pending_outputs_.insert(meta.number);
   pending_voutputs_.insert(vmeta.number);
   Iterator* iter = mem->NewIterator();
-  Iterator* viter = mem->NewIterator();
   Log(options_.info_log, "Level-0 table #%llu: started",
       (unsigned long long)meta.number);
   Log(options_.info_log, "Level-0 vtable #%llu: started",
@@ -557,7 +556,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     mutex_.Unlock();
     if (adgMod::MOD == 9 || adgMod::MOD == 10) {
-      s = BuildDuTable(dbname_, env_, options_, table_cache_, iter, &meta, viter, &vmeta, &arena);
+      s = BuildDuTable(dbname_, env_, options_, table_cache_, iter, &meta, &vmeta, &arena);
     } else {
       s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     }
@@ -571,7 +570,6 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       (unsigned long long)vmeta.number, (unsigned long long)vmeta.file_size,
       s.ToString().c_str());
   delete iter;
-  delete viter;
   pending_outputs_.erase(meta.number);
   pending_voutputs_.erase(vmeta.number);
 
@@ -853,7 +851,6 @@ void DBImpl::BackgroundCompaction() {
                        f->largest);
     if (adgMod::MOD == 9) {
       versions_->current()->SetVInput(c->level(), c->inputs_, c->vinputs_);
-1
       FileMetaData* vf = c->vinput(0, 0);
       c->edit()->DeleteVFile(c->level(), vf->number);
       c->edit()->AddVFile(c->level() + 1, vf->number, vf->file_size, vf->smallest,
@@ -1180,9 +1177,6 @@ Status DBImpl::FinishCompactionVOutputFile(CompactionState* compact, Iterator* i
   }
   const uint64_t current_bytes = compact->vbuilder->FileSize();
   compact->current_voutput()->file_size = current_bytes;
-  for (int i = 0; i < sorted_values.size(); ++i) {
-    sorted_values[i].second.file_size = current_bytes;
-  }
   compact->total_bytes += current_bytes;
   delete compact->vbuilder;
   compact->vbuilder = nullptr;
@@ -1865,9 +1859,9 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         instance->StartTimer(12);
 #endif  
         uint32_t file_number = DecodeFixed32(value->c_str());
-        uint32_t file_size = DecodeFixed32(value->c_str() + sizeof(uint32_t));
-        uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
-        uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 3);
+        uint64_t file_size = current->vfile_map_[file_number]->file_size;
+        uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t));
+        uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
         current->GetFromVFile(options, lkey, value, file_number, file_size,
                                   block_number, block_offset, &stats);
         
@@ -1879,12 +1873,12 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         instance->StartTimer(12);
 #endif  
         uint32_t file_number = DecodeFixed32(value->c_str());
-        uint32_t file_size = DecodeFixed32(value->c_str() + sizeof(uint32_t));
-        uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
-        uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 3);
+        uint64_t file_size = current->vfile_map_[file_number]->file_size;
+        uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t));
+        uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
         if (current->dep_.FindParent(file_number) != 0) {
           file_number = current->dep_.FindParent(file_number);
-          file_size = static_cast<uint32_t>(versions_->current()->vfile_map[file_number]->file_size);
+          file_size = current->vfile_map_[file_number]->file_size;
           current->GetFromMergedVFile(options, lkey, value, file_number, file_size,
                                       block_number, block_offset, &stats);
         } else {
@@ -1948,9 +1942,9 @@ void DBImpl::Scan(const ReadOptions& options, const Slice& key, const std::vecto
         instance->StartTimer(12);
 #endif  
         uint32_t file_number = DecodeFixed32(values[i].data());
-        uint32_t file_size = DecodeFixed32(values[i].data() + sizeof(uint32_t));
-        uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
-        uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 3);
+        uint64_t file_size = current->vfile_map_[file_number]->file_size;
+        uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t));
+        uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
         current->GetFromVFile(options, lkey, &cur_res, file_number, file_size,
                               block_number, block_offset, &stats);
         res.push_back(cur_res);
@@ -1962,12 +1956,12 @@ void DBImpl::Scan(const ReadOptions& options, const Slice& key, const std::vecto
         instance->StartTimer(12);
 #endif
         uint32_t file_number = DecodeFixed32(values[i].data());
-        uint32_t file_size = DecodeFixed32(values[i].data() + sizeof(uint32_t));
-        uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
-        uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 3);
+        uint64_t file_size = current->vfile_map_[file_number]->file_size;
+        uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t));
+        uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
         if (current->dep_.FindParent(file_number) != 0) {
           file_number = current->dep_.FindParent(file_number);
-          file_size = static_cast<uint32_t>(versions_->current()->vfile_map[file_number]->file_size);
+          file_size = current->vfile_map_[file_number]->file_size;
           current->GetFromMergedVFile(options, lkey, &cur_res, file_number, file_size,
                                       block_number, block_offset, &stats);
         } else {

@@ -102,35 +102,36 @@ Slice ConstructVKey(const Slice& key, const Slice& value, Arena* arena) {
 
 Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
                     TableCache* table_cache, Iterator* iter, FileMetaData* meta,
-                    Iterator* viter, FileMetaData* vmeta, Arena* arena) {
+                    FileMetaData* vmeta, Arena* arena) {
   Status s;
-  meta->file_size = 0;
   iter->SeekToFirst();
+  meta->file_size = 0;
   vmeta->file_size = 0;
-  viter->SeekToFirst();
 
   std::string fname = TableFileName(dbname, meta->number);
   std::string vfname = VTableFileName(dbname, vmeta->number);
   
-   vector<std::pair<Slice, VInfo>> kvs;
   // Generate value table
-  if (viter->Valid()) {
+  vector<std::pair<Slice, VInfo>> kvs;
+  if (iter->Valid()) {
     WritableFile* vfile;
     s = env->NewWritableFile(vfname, &vfile);
     if (!s.ok()) {
       return s;
     }
 
-    for (viter->SeekToFirst(); viter->Valid(); viter->Next()) {
-      Slice key = viter->key();
-      Slice value = viter->value();
+    for (; iter->Valid(); iter->Next()) {
+      Slice key = iter->key();
+      Slice value = iter->value();
       Slice vkey = ConstructVKey(key, value, arena);
       VInfo info;
       info.value = value;
       kvs.emplace_back(vkey, info);
     }
 
-    // std::sort(kvs.begin(), kvs.end(), VCompare);
+    if (adgMod::MOD == 10) {
+      std::sort(kvs.begin(), kvs.end(), VCompare);
+    }
 
     TableBuilder* builder = new TableBuilder(options, vfile);
     Slice min_key = kvs[0].first;
@@ -153,9 +154,6 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     if (s.ok()) {
       vmeta->file_size = builder->FileSize();
       vmeta->num_keys = builder->NumEntries();
-      for (auto& kv : kvs) {
-        kv.second.file_size = static_cast<uint32_t>(vmeta->file_size);
-      }
       assert(vmeta->file_size > 0);
     }
     delete builder;
@@ -171,19 +169,11 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     vfile = nullptr;
 
     // std::cout << "Write VSST " << vfname << " to L0 successfully!" << std::endl;
-
-    // if (s.ok()) {
-    //   // Verify that the table is usable
-    //   Iterator* it = table_cache->NewIterator(ReadOptions(), vmeta->number,
-    //                                           vmeta->file_size);
-    //   s = it->status();
-    //   delete it;
-    // }
   }
 
   // Check for input iterator errors
-  if (!viter->status().ok()) {
-    s = viter->status();
+  if (!iter->status().ok()) {
+    s = iter->status();
   }
 
   if (s.ok() && vmeta->file_size > 0) {
@@ -192,16 +182,17 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     env->DeleteFile(vfname);
   }
 
-
   // Generate key table
-  if (iter->Valid()) {
+  {
     WritableFile* file;
     s = env->NewWritableFile(fname, &file);
     if (!s.ok()) {
       return s;
     }
 
-    // std::sort(kvs.begin(), kvs.end(), KCompare);
+    if (adgMod::MOD == 10) {
+      std::sort(kvs.begin(), kvs.end(), KCompare);
+    }
 
     TableBuilder* builder = new TableBuilder(options, file);
     Slice min_key = kvs[0].first;
@@ -213,25 +204,12 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     meta->smallest.DecodeFrom(min_key);
     meta->largest.DecodeFrom(max_key);
 
-    // for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    //   Slice key = iter->key();
-    //   meta->largest.DecodeFrom(key);
-    //   char buffer[sizeof(uint32_t) * 4];
-    //   EncodeFixed32(buffer, kvs[idx].second.file_number);
-    //   EncodeFixed32(buffer + sizeof(uint32_t), kvs[idx].second.file_size);
-    //   EncodeFixed32(buffer + sizeof(uint32_t) * 2, kvs[idx].second.block_number);
-    //   EncodeFixed32(buffer + sizeof(uint32_t) * 3, kvs[idx].second.block_offset);
-    //   builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 4});
-    //   ++idx;
-    // }
-
     for (const auto& it : kvs) {
-      char buffer[sizeof(uint32_t) * 4];
+      char buffer[sizeof(uint32_t) * 3];
       EncodeFixed32(buffer, it.second.file_number);
-      EncodeFixed32(buffer + sizeof(uint32_t), it.second.file_size);
-      EncodeFixed32(buffer + sizeof(uint32_t) * 2, it.second.block_number);
-      EncodeFixed32(buffer + sizeof(uint32_t) * 3, it.second.block_offset);
-      builder->Add(it.first, (Slice) {buffer, sizeof(uint32_t) * 4});
+      EncodeFixed32(buffer + sizeof(uint32_t), it.second.block_number);
+      EncodeFixed32(buffer + sizeof(uint32_t) * 2, it.second.block_offset);
+      builder->Add(it.first, (Slice) {buffer, sizeof(uint32_t) * 3});
     }
 
     // Finish and check for builder errors
@@ -260,11 +238,6 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       s = it->status();
       delete it;
     }
-  }
-
-  // Check for input iterator errors
-  if (!iter->status().ok()) {
-    s = iter->status();
   }
 
   if (s.ok() && meta->file_size > 0) {

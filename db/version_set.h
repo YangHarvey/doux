@@ -221,7 +221,7 @@ public:
   std::vector<std::shared_ptr<adgMod::LearnedIndexData>> learned_index_data_;
   std::map<int, std::shared_ptr<adgMod::LearnedIndexData>> file_learned_index_data_;
   std::unordered_map<uint64_t, Table*> vtables_;
-  std::unordered_map<uint64_t, FileMetaData*> vfile_map;
+  std::unordered_map<uint64_t, FileMetaData*> vfile_map_;
   doux::Dependency dep_;
 };
 
@@ -385,7 +385,7 @@ class VersionSet {
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
   std::vector<std::string> compact_vpointers_;
-  char default_value_[sizeof(uint32_t) * 4];
+  char default_value_[sizeof(uint32_t) * 3];
 };
 
 // A Compaction encapsulates information about a compaction.

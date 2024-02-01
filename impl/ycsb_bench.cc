@@ -188,8 +188,8 @@ int main(int argc, char *argv[]) {
         if (fresh_write && iteration == 0) {
             string command = "rm -rf " + db_location;
             system(command.c_str());
-            // system("sudo fstrim -a -v");
-            // system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
+            system("sudo fstrim -a -v");
+            system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
 
             status = DB::Open(options, db_location, &db);
             assert(status.ok() && "Open Error");
@@ -245,7 +245,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (evict) {
-            // system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
+            system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
         }
 
 
