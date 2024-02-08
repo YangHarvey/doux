@@ -177,8 +177,7 @@ private:
   Status OpenCompactionOutputFile(CompactionState* compact);
   Status OpenCompactionVOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
-  Status FinishCompactionVOutputFile(CompactionState* compact, Iterator* input, 
-                                     std::vector<std::pair<Slice, VInfo>>& sorted_values);
+  Status FinishCompactionVOutputFile(CompactionState* compact, Iterator* input);
   Status FinishCompactionVOutputFile(CompactionState* compact);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);

@@ -115,7 +115,7 @@ inline int Slice::compare(const Slice& b) const {
   return r;
 }
 
-struct HashSlice {
+struct HashSliceV2 {
   std::size_t operator()(const Slice& s) const {
     std::size_t hash = 0;
     const char* data = s.data();

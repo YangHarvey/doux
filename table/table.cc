@@ -217,7 +217,8 @@ Iterator* Table::VBlockReader(void* arg, const ReadOptions& options,
 
   Iterator* iter;
   if (block != nullptr) {
-    iter = block->NewIterator(VKeyComparator());
+    const Comparator* cmp = adgMod::MOD == 10 ? VKeyComparator() : table->rep_->options.comparator;
+    iter = block->NewIterator(cmp);
     iter->RegisterCleanup(&DeleteBlock, block, nullptr);
   } else {
     iter = NewErrorIterator(s);
@@ -237,8 +238,9 @@ Iterator* Table::NewIterator(const ReadOptions& options, int file_num, RandomAcc
 }
 
 Iterator* Table::NewVIterator(const ReadOptions& options) const {
+  const Comparator* cmp = adgMod::MOD == 10 ? VKeyComparator() : rep_->options.comparator;
   return NewTwoLevelIterator(
-    rep_->index_block->NewIterator(VKeyComparator()),
+    rep_->index_block->NewIterator(cmp),
     &Table::VBlockReader, const_cast<Table*>(this), options
   );
 }

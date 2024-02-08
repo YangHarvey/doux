@@ -100,6 +100,13 @@ Slice ConstructVKey(const Slice& key, const Slice& value, Arena* arena) {
   return Slice(buf, key_size + sizeof(uint64_t));
 }
 
+inline Slice ConstructSlice(const Slice& from, Arena* arena) {
+  size_t size = from.size();
+  char* buf = arena->Allocate(size);
+  memcpy(buf, from.data(), size);
+  return Slice(buf, size);
+}
+
 Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
                     TableCache* table_cache, Iterator* iter, FileMetaData* meta,
                     FileMetaData* vmeta, Arena* arena) {
@@ -123,10 +130,10 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
       Slice value = iter->value();
-      Slice vkey = ConstructVKey(key, value, arena);
+      Slice tmpKey = adgMod::MOD == 10 ? ConstructVKey(key, value, arena) : ConstructSlice(key, arena);
       VInfo info;
       info.value = value;
-      kvs.emplace_back(vkey, info);
+      kvs.emplace_back(tmpKey, info);
     }
 
     if (adgMod::MOD == 10) {
@@ -136,10 +143,6 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     TableBuilder* builder = new TableBuilder(options, vfile);
     Slice min_key = kvs[0].first;
     Slice max_key = kvs[kvs.size() - 1].first;
-    if (adgMod::MOD == 9) {
-      min_key.remove_suffix(8);
-      max_key.remove_suffix(8);
-    }
     vmeta->smallest.DecodeFrom(min_key);
     vmeta->largest.DecodeFrom(max_key);
     for (auto& kv : kvs) {
@@ -197,19 +200,16 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     TableBuilder* builder = new TableBuilder(options, file);
     Slice min_key = kvs[0].first;
     Slice max_key = kvs[kvs.size() - 1].first;
-    if (adgMod::MOD == 9) {
-      min_key.remove_suffix(8);
-      max_key.remove_suffix(8);
-    }
     meta->smallest.DecodeFrom(min_key);
     meta->largest.DecodeFrom(max_key);
 
-    for (const auto& it : kvs) {
+    for (const auto& kv : kvs) {
+      Slice key = kv.first;
       char buffer[sizeof(uint32_t) * 3];
-      EncodeFixed32(buffer, it.second.file_number);
-      EncodeFixed32(buffer + sizeof(uint32_t), it.second.block_number);
-      EncodeFixed32(buffer + sizeof(uint32_t) * 2, it.second.block_offset);
-      builder->Add(it.first, (Slice) {buffer, sizeof(uint32_t) * 3});
+      EncodeFixed32(buffer, kv.second.file_number);
+      EncodeFixed32(buffer + sizeof(uint32_t), kv.second.block_number);
+      EncodeFixed32(buffer + sizeof(uint32_t) * 2, kv.second.block_offset);
+      builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 3});
     }
 
     // Finish and check for builder errors

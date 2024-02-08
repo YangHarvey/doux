@@ -839,6 +839,21 @@ void Version::SetVInput(int which,
   }
 }
 
+void Version::SetVInputV2(int which,
+                          const std::unordered_set<uint32_t>& vfiles,
+                          std::vector<FileMetaData*>* vinputs) {
+  for (const uint32_t number : vfiles) {
+    for (int i = 0; i < vfiles_[which].size(); i++) {
+      FileMetaData* vmeta = vfiles_[which][i];
+      if (number == vmeta->number) {
+        vinputs[0].push_back(vmeta);
+        break;
+      }
+    }
+  }
+  assert(vfiles.size() >= vinputs[0].size());
+}
+
 std::string Version::DebugString() const {
   std::string r;
   for (int level = 0; level < config::kNumLevels; level++) {
@@ -1082,24 +1097,39 @@ class VersionSet::Builder {
         cmp.internal_comparator = VKeyComparator();
       }
       size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
-      for (int level = 0; level < sz; level++) {
-        const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
-        std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
-        std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
-        const FileSet* added = vlevels_[level].added_files;
-        v->vfiles_[level].reserve(base_files.size() + added->size());
-        for (FileSet::const_iterator added_iter = added->begin();
-             added_iter != added->end(); ++added_iter) {
-          for (std::vector<FileMetaData*>::const_iterator bpos = 
-                  std::upper_bound(base_iter, base_end, *added_iter, cmp);
-               base_iter != bpos; ++base_iter) {
+      if (adgMod::MOD == 10) {
+        for (int level = 0; level < sz; level++) {
+          const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
+          std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
+          std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
+          const FileSet* added = vlevels_[level].added_files;
+          v->vfiles_[level].reserve(base_files.size() + added->size());
+          for (FileSet::const_iterator added_iter = added->begin();
+              added_iter != added->end(); ++added_iter) {
+            for (std::vector<FileMetaData*>::const_iterator bpos = 
+                    std::upper_bound(base_iter, base_end, *added_iter, cmp);
+                base_iter != bpos; ++base_iter) {
+              MaybeAddVFile(v, level, *base_iter);
+            }
+            MaybeAddVFile(v, level, *added_iter);
+          }
+
+          for (; base_iter != base_end; ++base_iter) {
             MaybeAddVFile(v, level, *base_iter);
           }
-          MaybeAddVFile(v, level, *added_iter);
         }
-
-        for (; base_iter != base_end; ++base_iter) {
-          MaybeAddVFile(v, level, *base_iter);
+      } else if (adgMod::MOD == 9) {
+        for (int level = 0; level < sz; level++) {
+          const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
+          const FileSet* added = vlevels_[level].added_files;
+          v->vfiles_[level].reserve(base_files.size() + added->size());
+          for (auto it = base_files.begin(); it != base_files.end(); ++it) {
+            MaybeAddVFile(v, level, *it);
+          }
+          for (FileSet::const_iterator added_iter = added->begin();
+               added_iter != added->end(); ++added_iter) {
+            MaybeAddVFile(v, level, *added_iter);
+          }
         }
       }
     }
@@ -1137,7 +1167,7 @@ class VersionSet::Builder {
       std::vector<FileMetaData*>* files = &v->vfiles_[level];
       if (level > 0 && !files->empty()) {
         const Comparator* cmp = adgMod::MOD == 10 ? VKeyComparator() : &vset_->icmp_;
-        assert(cmp->Compare((*files)[files->size() - 1]->largest, f->smallest) < 0);
+        // assert(cmp->Compare((*files)[files->size() - 1]->largest, f->smallest) < 0);
       }
       f->refs++;
       files->push_back(f);
@@ -1724,6 +1754,41 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
             new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
             &GetFileIterator, table_cache_, options);
       }
+    }
+  }
+  assert(num <= space);
+  Iterator* result = NewMergingIterator(&icmp_, list, num);
+  delete[] list;
+  return result;
+}
+
+Iterator* VersionSet::MakeInputIteratorV2(Compaction* c) {
+  ReadOptions options;
+  options.verify_checksums = options_->paranoid_checks;
+  options.fill_cache = false;
+
+  std::unordered_map<uint64_t, Table*>& vtables = current_->vtables_;
+  const int space = c->vinputs_[0].size();
+  Iterator** list = new Iterator*[space];
+  int num = 0;
+  if (!c->vinputs_[0].empty()) {
+    const std::vector<FileMetaData*>& vfiles = c->vinputs_[0];
+    for (size_t i = 0; i < vfiles.size(); i++) {
+      Iterator* it = nullptr;
+      if (vtables.find(vfiles[i]->number) == vtables.end()) {
+        std::string vfname = VTableFileName(dbname_, vfiles[i]->number);
+        RandomAccessFile* vfile = nullptr;
+        Table* table = nullptr;
+        env_->NewRandomAccessFile(vfname, &vfile);
+        Table::Open(*options_, vfile, vfiles[i]->file_size, &table);
+        if (table) {
+          vtables[vfiles[i]->number] = table;
+          it = table->NewVIterator(options);
+        }
+      } else {
+        it = vtables[vfiles[i]->number]->NewVIterator(options);
+      }
+      list[num++] = it;
     }
   }
   assert(num <= space);

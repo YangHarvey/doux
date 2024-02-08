@@ -146,6 +146,10 @@ class Version {
   void SetVInput(int which,
                  std::vector<FileMetaData*>* inputs, 
                  std::vector<FileMetaData*>* vinputs);
+  
+  void SetVInputV2(int which,
+                   const std::unordered_set<uint32_t>& vfiles,
+                   std::vector<FileMetaData*>* vinputs);
 
   int NumFiles(int level) const { return files_[level].size(); }
 
@@ -313,6 +317,8 @@ class VersionSet {
   // The caller should delete the iterator when no longer needed.
   Iterator* MakeInputIterator(Compaction* c);
 
+  Iterator* MakeInputIteratorV2(Compaction* c);
+
   // Returns true iff some level needs a compaction.
   bool NeedsCompaction() const {
     Version* v = current_;
@@ -462,11 +468,11 @@ class Compaction {
   // Each compaction reads inputs from "level_" and "level_+1"
   std::vector<FileMetaData*> inputs_[2];  // The two sets of inputs
   std::vector<FileMetaData*> vinputs_[2];
-
-  std::unordered_set<Slice, HashSlice> key_set_;
+  
+  std::unordered_map<Slice, size_t, HashSliceV2> key_idx_;
   std::vector<std::pair<Slice, VInfo>> pending_kvs_;
 
-  std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>, HashSlice> key_map_;
+  std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>, HashSliceV2> key_map_;
   std::vector<std::pair<Slice, Slice>> kvs_;
 
  private:
