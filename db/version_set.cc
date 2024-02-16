@@ -458,69 +458,69 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       files = &tmp[0];
       num_files = tmp.size();
     } else {
-        if (adgMod::MOD == 6 || adgMod::MOD == 7) {
-            adgMod::LearnedIndexData* learned_this_level = learned_index_data_[level].get();
-            if (learned_this_level->Learned(this, adgMod::db->version_count, level)) {
-                //std::cout << "using model" << std::endl;
-                learned = true;
-                std::pair<uint64_t, uint64_t> bounds = learned_this_level->GetPosition(user_key);
+      if (adgMod::MOD == 6 || adgMod::MOD == 7) {
+        adgMod::LearnedIndexData* learned_this_level = learned_index_data_[level].get();
+        if (learned_this_level->Learned(this, adgMod::db->version_count, level)) {
+            //std::cout << "using model" << std::endl;
+            learned = true;
+            std::pair<uint64_t, uint64_t> bounds = learned_this_level->GetPosition(user_key);
 
-                //printf("%lu %lu\n", bounds.first, bounds.second);
+            //printf("%lu %lu\n", bounds.first, bounds.second);
 
-                size_t index;
-                if (bounds.first <= learned_this_level->MaxPosition()) {
-                    learned_this_level->num_entries_accumulated.Search(user_key, bounds.first, bounds.second, &index, &position_lower, &position_upper);
+            size_t index;
+            if (bounds.first <= learned_this_level->MaxPosition()) {
+                learned_this_level->num_entries_accumulated.Search(user_key, bounds.first, bounds.second, &index, &position_lower, &position_upper);
 
-                    //printf("%lu %lu %lu\n", index, position_lower, position_upper);
-                    FileMetaData* file = files_[level][index];
-                    if (ucmp->Compare(file->smallest.user_key(), user_key) <= 0) {
-                        files = &files_[level][index];
-                        num_files = 1;
-                    } else {
-                        files = nullptr;
-                        num_files = 0;
-                    }
-
+                //printf("%lu %lu %lu\n", index, position_lower, position_upper);
+                FileMetaData* file = files_[level][index];
+                if (ucmp->Compare(file->smallest.user_key(), user_key) <= 0) {
+                    files = &files_[level][index];
+                    num_files = 1;
                 } else {
                     files = nullptr;
                     num_files = 0;
                 }
+
             } else {
-                // Binary search to find earliest index whose largest key >= ikey.
-                uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-                if (index >= num_files) {
-                    files = nullptr;
-                    num_files = 0;
-                } else {
-                    tmp2 = files[index];
-                    if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
-                        // All of "tmp2" is past any data for user_key
-                        files = nullptr;
-                        num_files = 0;
-                    } else {
-                        files = &tmp2;
-                        num_files = 1;
-                    }
-                }
-            }
-        } else {
-            // Binary search to find earliest index whose largest key >= ikey.
-            uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-            if (index >= num_files) {
                 files = nullptr;
                 num_files = 0;
-            } else {
-                tmp2 = files[index];
-                if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
-                    // All of "tmp2" is past any data for user_key
-                    files = nullptr;
-                    num_files = 0;
-                } else {
-                    files = &tmp2;
-                    num_files = 1;
-                }
             }
+        } else {
+          // Binary search to find earliest index whose largest key >= ikey.
+          uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
+          if (index >= num_files) {
+            files = nullptr;
+            num_files = 0;
+          } else {
+            tmp2 = files[index];
+            if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
+              // All of "tmp2" is past any data for user_key
+              files = nullptr;
+              num_files = 0;
+            } else {
+              files = &tmp2;
+              num_files = 1;
+            }
+          }
         }
+      } else {
+        // Binary search to find earliest index whose largest key >= ikey.
+        uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
+        if (index >= num_files) {
+          files = nullptr;
+          num_files = 0;
+        } else {
+          tmp2 = files[index];
+          if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
+            // All of "tmp2" is past any data for user_key
+            files = nullptr;
+            num_files = 0;
+          } else {
+            files = &tmp2;
+            num_files = 1;
+          }
+        }
+      }
     }
 #ifdef INTERNAL_TIMER
     auto temp2 = instance->PauseTimer(0);
@@ -580,7 +580,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
             }
 #endif      
             if (adgMod::MOD == 9) {
-              value->assign(vset_->default_value_, 32);
+              value->assign(vset_->default_value_, sizeof(uint32_t) * 3);
               s = Status();
             }
             break;  // Keep searching in other files

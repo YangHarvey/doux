@@ -1224,7 +1224,13 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
-  compact->compaction->AddVInputDeletions(compact->compaction->edit());
+  if (adgMod::MOD == 9) {
+    if (compact->compaction->level() == 0) {
+      compact->compaction->AddVInputDeletions(compact->compaction->edit());    
+    }
+  } else if (adgMod::MOD == 10) {
+    compact->compaction->AddVInputDeletions(compact->compaction->edit());
+  }
   // if (adgMod::MOD == 9) {
   //   compact->compaction->MoveToNextLevel(compact->compaction->edit());
   // } else if (adgMod::MOD == 10) {
@@ -1415,6 +1421,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     input->Next();
   }
 
+  // std::cout << "key_idx.size(): " << key_idx.size() << std::endl;
+  // std::cout << "pending_kvs.size(): " << pending_kvs.size() << std::endl;
+
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
     status = Status::IOError("Deleting DB during compaction");
   }
@@ -1424,9 +1433,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
                                       vfiles, compact->compaction->vinputs_);
     Iterator* vinput = versions_->MakeInputIteratorV2(compact->compaction);
     vinput->SeekToFirst();
+    // int key_cnt = 0;
+    // int valid_key_cnt = 0;
     for (; vinput->Valid() && !shutting_down_.load(std::memory_order_acquire);) {
       Slice key = vinput->key();
+      // key_cnt  += 1;
       if (key_idx.find(key) != key_idx.end()) {
+        // valid_key_cnt += 1;
         // Open output value file if necessary
         if (compact->vbuilder == nullptr) {
           status = OpenCompactionVOutputFile(compact);
@@ -1438,7 +1451,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           compact->current_voutput()->smallest.DecodeFrom(key);
         }
         compact->current_voutput()->largest.DecodeFrom(key);
-        char buffer[sizeof(uint32_t) * 3];
         VInfo& info = pending_kvs[key_idx[key]].second;
         info.file_number = compact->current_voutput()->number;
         info.block_number = compact->vbuilder->BlockNumber();
@@ -1447,7 +1459,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
         // Close output value file if it is big enough
         if (compact->vbuilder->FileSize() >= 
-            compact->compaction->MaxValueOutputFileSize()) {
+            compact->compaction->MaxOutputFileSize()) {
           status = FinishCompactionVOutputFile(compact);
           if (!status.ok()) {
             break;
@@ -1457,6 +1469,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
       vinput->Next();
     }
+
+    // std::cout << "key_cnt: " << key_cnt << std::endl;
+    // std::cout << "valid_key_cnt: " << valid_key_cnt << std::endl;
 
     if (compact->vbuilder != nullptr) {
       status = FinishCompactionVOutputFile(compact);
@@ -1502,13 +1517,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         }
       } 
     }
+  }
 
-    if (compact->builder != nullptr) {
-      status = FinishCompactionOutputFile(compact, nullptr);
-    }
-    if (!status.ok()) {
-      return status;
-    }
+  if (status.ok() && compact->builder != nullptr) {
+    status = FinishCompactionOutputFile(compact, nullptr);
+  }
+  if (!status.ok()) {
+    return status;
   }
 
   if (status.ok()) {
@@ -1762,6 +1777,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   current->Ref();
 
   bool have_stat_update = false;
+  bool read_from_mem = false;
   GetStats stats;
 
   // Unlock while reading from files and memtables
@@ -1780,6 +1796,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         adgMod::levelled_counters[3].Increment(7);
 #endif
         // Done
+        read_from_mem = true;
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(14);
@@ -1788,6 +1805,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         adgMod::levelled_counters[3].Increment(7);
 #endif
         // Done
+        read_from_mem = true;
     } else {
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(14);
@@ -1805,7 +1823,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);
 #endif
-    } else if (adgMod::MOD == 9 && s.ok()) {
+    } else if (adgMod::MOD == 9 && !read_from_mem && s.ok()) {
 #ifdef INTERNAL_TIMER
         instance->StartTimer(12);
 #endif  
@@ -1819,12 +1837,12 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);
 #endif
-    } else if (adgMod::MOD == 10 && s.ok()) {
+    } else if (adgMod::MOD == 10 && !read_from_mem && s.ok()) {
 #ifdef INTERNAL_TIMER
         instance->StartTimer(12);
 #endif  
         uint32_t file_number = DecodeFixed32(value->c_str());
-        uint64_t file_size = current->vfile_map_[file_number]->file_size;
+        uint64_t file_size = 0;
         uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t));
         uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
         if (current->dep_.FindParent(file_number) != 0) {
@@ -1833,6 +1851,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
           current->GetFromMergedVFile(options, lkey, value, file_number, file_size,
                                       block_number, block_offset, &stats);
         } else {
+          file_size = current->vfile_map_[file_number]->file_size;
           current->GetFromVFile(options, lkey, value, file_number, file_size,
                                 block_number, block_offset, &stats);
         }

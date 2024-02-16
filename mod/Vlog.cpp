@@ -15,8 +15,8 @@ namespace adgMod {
 VLog::VLog(const std::string& vlog_name) : writer(nullptr), reader(nullptr) {
     adgMod::env->NewWritableFile(vlog_name, &writer);
     adgMod::env->NewRandomAccessFile(vlog_name, &reader);
-    adgMod::env->NewWritableFile(vlog_name + ".bak", &writer1);
-    adgMod::env->NewRandomAccessFile(vlog_name + ".bak", &reader1);
+    adgMod::env->NewWritableFile(vlog_name + ".latest", &writer1);
+    adgMod::env->NewRandomAccessFile(vlog_name + ".latest", &reader1);
     buffer.reserve(buffer_size_max * 2);
     buffer1.reserve(1024 * 1024);
     struct ::stat file_stat;
@@ -78,7 +78,7 @@ void VLog::GC() {
         writer1->Append(buffer1);
         writer1->Flush();
         buffer1.clear();
-        buffer.reserve(1024 * 1024);
+        buffer1.reserve(1024 * 1024);
         writer->Sync();
     }
 }

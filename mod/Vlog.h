@@ -16,8 +16,10 @@ private:
     std::string buffer;
     std::string buffer1;
     uint64_t vlog_size;
+    uint64_t curr_addr;
 
     void Flush();
+    void Validate();
 
 public:
     explicit VLog(const std::string& vlog_name);

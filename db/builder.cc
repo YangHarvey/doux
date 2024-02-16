@@ -200,6 +200,10 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     TableBuilder* builder = new TableBuilder(options, file);
     Slice min_key = kvs[0].first;
     Slice max_key = kvs[kvs.size() - 1].first;
+    if (adgMod::MOD == 10) {
+      min_key.remove_suffix(8);
+      max_key.remove_suffix(8);
+    }
     meta->smallest.DecodeFrom(min_key);
     meta->largest.DecodeFrom(max_key);
 
@@ -209,6 +213,9 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       EncodeFixed32(buffer, kv.second.file_number);
       EncodeFixed32(buffer + sizeof(uint32_t), kv.second.block_number);
       EncodeFixed32(buffer + sizeof(uint32_t) * 2, kv.second.block_offset);
+      if (adgMod::MOD == 10) {
+        key.remove_suffix(8);
+      }
       builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 3});
     }
 

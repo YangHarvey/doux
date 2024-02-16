@@ -97,9 +97,9 @@ class DBIter : public Iterator {
       }
       LookupKey lkey(iter_->key(), snapshot);
       uint32_t file_number = DecodeFixed32(vaddr.data());
-      uint32_t file_size = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
-      uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
-      uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 3);
+      uint64_t file_size = adgMod::db->versions_->current()->vfile_map_[file_number]->file_size;
+      uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
+      uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
       string cur_res;
       adgMod::db->versions_->current()->GetFromVFile(
         adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
@@ -122,16 +122,17 @@ class DBIter : public Iterator {
       }
       LookupKey lkey(iter_->key(), snapshot);
       uint32_t file_number = DecodeFixed32(vaddr.data());
-      uint32_t file_size = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
-      uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
-      uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 3);
+      uint64_t file_size = 0;
+      uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
+      uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
       string cur_res;
       if (adgMod::db->versions_->current()->dep_.FindParent(file_number) != 0) {
         file_number = adgMod::db->versions_->current()->dep_.FindParent(file_number);
-        file_size = static_cast<uint32_t>(adgMod::db->versions_->current()->vfile_map_[file_number]->file_size);
+        file_size = adgMod::db->versions_->current()->vfile_map_[file_number]->file_size;
         adgMod::db->versions_->current()->GetFromMergedVFile(
           adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
       } else {
+        file_size = adgMod::db->versions_->current()->vfile_map_[file_number]->file_size;
         adgMod::db->versions_->current()->GetFromVFile(
           adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
       }
