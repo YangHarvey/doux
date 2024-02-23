@@ -164,6 +164,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       version_count(0) {
         adgMod::db = this;
         vlog = new adgMod::VLog(dbname_ + "/vlog.txt");
+        cold_vlog = new adgMod::VLog(dbname_ + "/cold_vlog.txt");
       }
 
 DBImpl::~DBImpl() {
@@ -203,6 +204,7 @@ DBImpl::~DBImpl() {
   delete adgMod::file_data;
   delete adgMod::learn_cb_model;
   delete vlog;
+  delete cold_vlog;
   adgMod::file_stats.clear();
 }
 
@@ -806,10 +808,6 @@ void DBImpl::BackgroundCall() {
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
-  if (adgMod::MOD == 8) {
-    vlog->GC();
-  }
-
   adgMod::Stats* instance = adgMod::Stats::GetInstance();
   instance->StartTimer(7);
 
@@ -959,6 +957,26 @@ void DBImpl::BackgroundCompaction() {
   if (to_delete) {
     DeleteObsoleteFiles();
   }
+}
+
+void DBImpl::ReclaimVLog() {
+  int reclaimSize = 64 * 1024 * 1024;
+  int reclaimNum = reclaimSize / (adgMod::key_size + adgMod::value_size);
+  int pos = 0;
+  int put_idx_size = adgMod::put_idx.size();
+  if (put_idx_size == 0) {
+    return;
+  }
+  for (; pos < adgMod::cur_progress + reclaimNum; ++pos) {
+    string value;
+    Status s = Get(adgMod::read_options, adgMod::keys[pos % put_idx_size], &value);
+    if (s.ok()) {
+      cold_vlog->AddRecord({adgMod::keys[pos].data(), adgMod::keys[pos].size()},
+                           {value.data(), value.size()});
+    }
+  }
+  adgMod::cur_progress = pos;
+  std::cout << "Reclaim vlog: " << reclaimNum << " entries" << std::endl;
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -1566,7 +1584,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   return status;
 }
 
-
 Status DBImpl::DoVCompactionWork(CompactionState* compact) {
   Log(options_.info_log, "Compacting %d@%d + %d@%d vfiles",
       compact->compaction->num_input_vfiles(0), compact->compaction->level(),
@@ -1648,7 +1665,7 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     return status;
   }
 
-  std::sort(kvs.begin(), kvs.end(), VKCompare);
+  // std::sort(kvs.begin(), kvs.end(), VKCompare);
   Slice min_key = kvs[0].first;
   Slice max_key = kvs[kvs.size() - 1].first;
   compact->current_voutput()->smallest.DecodeFrom(min_key);
@@ -1811,6 +1828,10 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         instance->PauseTimer(14);
 #endif
         s = current->Get(options, lkey, value, &stats);
+        // if (s.ok()) {
+        //   std::cout << "key: " << key.ToString() << ", "
+        //             << "value.size: " << value->size() << std::endl;
+        // }
     }
 
     if ((adgMod::MOD == 7 || adgMod::MOD == 8) && s.ok()) {
@@ -1865,6 +1886,55 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 //  if (have_stat_update && current->UpdateStats(stats)) {
 //    MaybeScheduleCompaction();
 //  }
+
+  mem->Unref();
+  if (imm != nullptr) imm->Unref();
+  current->Unref();
+  return s;
+}
+
+Status DBImpl::PreGet(const ReadOptions& options, const Slice& key,
+                      std::string* value) {
+  adgMod::Stats* instance = adgMod::Stats::GetInstance();
+
+  Status s;
+  MutexLock l(&mutex_);
+  SequenceNumber snapshot;
+  if (options.snapshot != nullptr) {
+    snapshot =
+        static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
+  } else {
+    snapshot = versions_->LastSequence();
+  }
+
+  MemTable* mem = mem_;
+  MemTable* imm = imm_;
+  Version* current = versions_->current();
+  mem->Ref();
+  if (imm != nullptr) imm->Ref();
+  current->Ref();
+
+  bool have_stat_update = false;
+  bool read_from_mem = false;
+  GetStats stats;
+
+  // Unlock while reading from files and memtables
+  {
+    mutex_.Unlock();
+    // First look in the memtable, then in the immutable memtable (if any).
+    LookupKey lkey(key, snapshot);
+    if (mem->Get(lkey, value, &s)) {
+        // Done
+        read_from_mem = true;
+    } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
+        // Done
+        read_from_mem = true;
+    } else {
+        s = current->Get(options, lkey, value, &stats);
+    }
+
+    mutex_.Lock();
+  }
 
   mem->Unref();
   if (imm != nullptr) imm->Unref();
@@ -1998,6 +2068,9 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
     return DB::Put(o, key, val);
   } else {
     // adgMod::MOD == 7 (Bourbon) || adgMod::MOD == 8 (WiscKey)
+    if (adgMod::put_idx.size() % (adgMod::keys.size() / 25) == 0) {
+      ReclaimVLog();
+    }
     uint64_t value_address = adgMod::db->vlog->AddRecord(key, val);
     char buffer[sizeof(uint64_t) + sizeof(uint32_t)];
     EncodeFixed64(buffer, value_address);
@@ -2345,7 +2418,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   }
   if (s.ok()) {
     impl->DeleteObsoleteFiles();
-    //impl->MaybeScheduleCompaction();
+    // impl->MaybeScheduleCompaction();
     impl->versions_->current()->ReadLevelModel();
     impl->versions_->current()->ReadFileStats();
   }

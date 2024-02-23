@@ -2036,6 +2036,11 @@ class ModelDB : public DB {
     assert(false);  // Not implemented
     return Status::NotFound(key);
   }
+  virtual Status PreGet(const ReadOptions& options, const Slice& key,
+                        std::string* value) {
+    assert(false);  // Not implemented
+    return Status::NotFound(key);
+  }
   virtual Iterator* NewIterator(const ReadOptions& options) {
     if (options.snapshot == nullptr) {
       KVMap* saved = new KVMap;

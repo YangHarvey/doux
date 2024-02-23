@@ -47,6 +47,8 @@ class DBImpl : public DB {
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options, const Slice& key,
                      std::string* value);
+  virtual Status PreGet(const ReadOptions& options, const Slice& key, 
+                        std::string* value);
   virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
                     uint64_t length_range, std::vector<std::string>& res);
   virtual Iterator* NewIterator(const ReadOptions&);
@@ -88,6 +90,7 @@ class DBImpl : public DB {
   void WaitForBackground();
   std::atomic<int> version_count;
   adgMod::VLog* vlog;
+  adgMod::VLog* cold_vlog;
 
 private:
   friend class DB;
@@ -164,6 +167,7 @@ private:
 
   void BackgroundCall();
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void ReclaimVLog();
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupVCompaction(CompactionState* compact)

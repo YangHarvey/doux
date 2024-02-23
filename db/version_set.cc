@@ -579,10 +579,10 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
                 adgMod::file_stats_mutex.Unlock();
             }
 #endif      
-            if (adgMod::MOD == 9) {
-              value->assign(vset_->default_value_, sizeof(uint32_t) * 3);
-              s = Status();
-            }
+            // if (adgMod::MOD == 9) {
+            //   value->assign(vset_->default_value_, sizeof(uint32_t) * 3);
+            //   s = Status();
+            // }
             break;  // Keep searching in other files
         }
         case kFound: {

@@ -35,6 +35,7 @@ namespace adgMod {
     extern uint32_t test_num_file_segments;
     extern int key_size;
     extern int value_size;
+
     extern leveldb::Env* env;
     extern leveldb::DBImpl* db;
     extern leveldb::ReadOptions read_options;
@@ -67,6 +68,10 @@ namespace adgMod {
     extern uint64_t level_compaction_limit;
     extern uint64_t invalid_limit;
 
+    extern vector<string> keys;
+    extern vector<int> put_idx;
+    extern int cur_progress;
+    extern int last_progress;
     extern vector<Counter> levelled_counters;
     extern vector<vector<Event*>> events;
     extern leveldb::port::Mutex compaction_counter_mutex;

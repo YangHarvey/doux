@@ -90,6 +90,8 @@ class LEVELDB_EXPORT DB {
   // May return some other Status on an error.
   virtual Status Get(const ReadOptions& options, const Slice& key,
                      std::string* value) = 0;
+  virtual Status PreGet(const ReadOptions& options, const Slice& key,
+                        std::string* value) = 0;
   
   virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
                     uint64_t length_range, std::vector<std::string>& res) {};

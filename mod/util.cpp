@@ -16,6 +16,7 @@ namespace adgMod {
     uint32_t test_num_file_segments = 100;
     int key_size;
     int value_size;
+
     leveldb::Env* env;
     leveldb::DBImpl* db;
     leveldb::ReadOptions read_options;
@@ -48,6 +49,10 @@ namespace adgMod {
     uint64_t level_compaction_limit = 100;
     uint64_t invalid_limit = 10;
 
+    vector<string> keys;
+    vector<int> put_idx;
+    int cur_progress = 0;
+    int last_progress = 0;
     vector<Counter> levelled_counters(12);
     vector<vector<Event*>> events(3);
     leveldb::port::Mutex compaction_counter_mutex;

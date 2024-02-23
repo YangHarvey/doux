@@ -66,7 +66,7 @@ enum WorkloadType {
 // Regenerate keys after init db
 // Existing keys: [0, num_entries - 1]
 // Beyond existing keys: [num_entries, 999,999,999,999,999] (within 16 bytes)
-void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_entries, uint64_t num_operations) {
+void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_entries, uint64_t num_operations, int load_type) {
     std::default_random_engine e1(255);
     std::uniform_int_distribution<uint64_t> udist_within_key(0, num_entries - 1);
     std::uniform_int_distribution<uint64_t> udist_beyond_key(num_entries, 999999999999999);
@@ -116,6 +116,14 @@ void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_e
         }
         default: assert(false && "Unsupported workload type.");
     }
+
+    if (load_type == LoadType::Ordered) {
+        for (uint64_t i = 0; i < num_operations; i++) {
+            keys[i] = generate_key(to_string(i));
+        }
+    }
+
+    std::cout << "Conduct ops num: " << num_operations << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -162,12 +170,14 @@ int main(int argc, char *argv[]) {
 
     adgMod::fd_limit = unlimit_fd ? 1024 * 1024 : 1024;
 
-    vector<string> keys;
-    // keys: [0, num_entries - 1]
-    for (uint64_t i = 0; i < num_entries; ++i) {
-        keys.push_back(generate_key(to_string(i)));
+    vector<string>& keys = adgMod::keys;
+    if (fresh_write) {
+        // keys: [0, num_entries - 1]
+        for (uint64_t i = 0; i < num_entries; ++i) {
+            keys.push_back(generate_key(to_string(i)));
+        }
+        cout << "Generate keys num: " << keys.size() << endl;
     }
-    cout << "Generate keys num: " << keys.size() << endl;
 
     adgMod::Stats* instance = adgMod::Stats::GetInstance();
     vector<vector<size_t>> times(20);
@@ -188,7 +198,6 @@ int main(int argc, char *argv[]) {
         if (fresh_write && iteration == 0) {
             string command = "rm -rf " + db_location;
             system(command.c_str());
-            system("sudo fstrim -a -v");
             system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
 
             status = DB::Open(options, db_location, &db);
@@ -231,6 +240,7 @@ int main(int argc, char *argv[]) {
                 for (int i = chunks[cut].first; i < chunks[cut].second; ++i) {
                     string value = generate_value(uniform_dist_value(e1));
                     status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
+                    adgMod::put_idx.emplace_back(i);
                 }
             }
             adgMod::db->vlog->Sync();
@@ -246,13 +256,14 @@ int main(int argc, char *argv[]) {
 
         if (evict) {
             system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
+            cout << "Drop all caches" << endl;
         }
 
 
         if (!fresh_write || iteration > 0) {
             // Prepare keys for later workloads
             keys.clear();
-            fillKeysByWorkloads(keys, workload_type, num_entries, num_operations);
+            fillKeysByWorkloads(keys, workload_type, num_entries, num_operations, load_type);
 
             cout << "Starting up" << endl;
             status = DB::Open(options, db_location, &db);
