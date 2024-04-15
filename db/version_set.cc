@@ -842,15 +842,34 @@ void Version::SetVInput(int which,
 void Version::SetVInputV2(int which,
                           const std::unordered_set<uint32_t>& vfiles,
                           std::vector<FileMetaData*>* vinputs) {
-  for (const uint32_t number : vfiles) {
-    for (int i = 0; i < vfiles_[which].size(); i++) {
-      FileMetaData* vmeta = vfiles_[which][i];
-      if (number == vmeta->number) {
-        vinputs[0].push_back(vmeta);
-        break;
+  int max_stalled_level = 0;
+  if (adgMod::value_size <= 256) {
+    max_stalled_level = 3;
+  } else if (adgMod::value_size <= 4096) {
+    max_stalled_level = 2;
+  } else {
+    max_stalled_level = 1;
+  }
+
+  if (which >= max_stalled_level) {
+    for (int level = 0; level <= which; ++level) {
+      for (int i = 0; i < vfiles_[level].size(); ++i) {
+        FileMetaData* vmeta = vfiles_[level][i];
+        if (vfiles.find(vmeta->number) != vfiles.end()) {
+          vinputs[0].push_back(vmeta);
+        }
       }
     }
   }
+  // for (const uint32_t number : vfiles) {
+  //   for (int i = 0; i < vfiles_[which].size(); i++) {
+  //     FileMetaData* vmeta = vfiles_[which][i];
+  //     if (number == vmeta->number) {
+  //       vinputs[0].push_back(vmeta);
+  //       break;
+  //     }
+  //   }
+  // }
   assert(vfiles.size() >= vinputs[0].size());
 }
 
@@ -2224,11 +2243,12 @@ void Version::PrintAll() const {
         string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
         string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
         printf("File %d in level %d:\n"
-                        "\tNumber: %lu\n"
-                        "\tSize: %lu\n"
-                        "\tNumEntries: %lu\n"
-                        "\tKey Range: %s to %s\n", j, i, file->number, file->file_size, file->num_keys,
-                        small_key.c_str(), large_key.c_str());
+                "\tNumber: %lu\n"
+                "\tSize: %lu\n"
+                "\tNumEntries: %lu\n"
+                "\tKey Range: %s to %s\n",
+                j, i, file->number, file->file_size, file->num_keys,
+                small_key.c_str(), large_key.c_str());
       }
     }
 
@@ -2240,16 +2260,23 @@ void Version::PrintAll() const {
         FileMetaData* file = vfiles_[i][j];
         string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
         string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+        uint64_t small_vkey = 0, large_vkey = 0;
         if (adgMod::MOD == 10) {
           small_key = small_key.substr(0, small_key.size() - 8);
           large_key = large_key.substr(0, large_key.size() - 8);
+          small_vkey = *reinterpret_cast<uint64_t*>(small_key.data() + small_key.size() - 8);
+          large_vkey = *reinterpret_cast<uint64_t*>(large_key.data() + large_key.size() - 8);
         }
         printf("VFile %d in level %d:\n"
-                        "\tNumber: %lu\n"
-                        "\tSize: %lu\n"
-                        "\tNumEntries: %lu\n"
-                        "\tKey Range: %s to %s\n", j, i, file->number, file->file_size, file->num_keys,
-                        small_key.c_str(), large_key.c_str());
+                "\tNumber: %lu\n"
+                "\tSize: %lu\n"
+                "\tNumEntries: %lu\n"
+                "\tKey Range: %s to %s\n",
+                j, i, file->number, file->file_size, file->num_keys,
+                small_key.c_str(), large_key.c_str());
+        if (adgMod::MOD == 10) {
+          printf("\tVKey Range: %lu to %lu\n", small_vkey, large_vkey);
+        }
       }
     }
 }

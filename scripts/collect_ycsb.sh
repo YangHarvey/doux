@@ -1,5 +1,5 @@
 #!/bin/bash
-cd ../eval_ycsb
+cd ../eval_ycsb_1
 
 echo '===== YCSB Insert ====='
 echo 'LevelDB:'
@@ -43,3 +43,69 @@ echo 'DiffKV:'
 cat ycsb_diffkv_scan.txt | grep 'Timer 13 MEAN'
 echo 'Doux:'
 cat ycsb_doux_scan.txt | grep 'Timer 13 MEAN'
+
+
+echo '===== YCSB_A  ====='
+echo 'LevelDB:'
+cat ycsb_leveldb_ycsb_a.txt | grep 'Timer 13 MEAN'
+echo 'WiscKey:'
+cat ycsb_wisckey_ycsb_a.txt | grep 'Timer 13 MEAN'
+echo 'DiffKV:'
+cat ycsb_diffkv_ycsb_a.txt | grep 'Timer 13 MEAN'
+echo 'Doux:'
+cat ycsb_doux_ycsb_a.txt | grep 'Timer 13 MEAN'
+
+
+echo '===== YCSB_B  ====='
+echo 'LevelDB:'
+cat ycsb_leveldb_ycsb_b.txt | grep 'Timer 13 MEAN'
+echo 'WiscKey:'
+cat ycsb_wisckey_ycsb_b.txt | grep 'Timer 13 MEAN'
+echo 'DiffKV:'
+cat ycsb_diffkv_ycsb_b.txt | grep 'Timer 13 MEAN'
+echo 'Doux:'
+cat ycsb_doux_ycsb_b.txt | grep 'Timer 13 MEAN'
+
+
+echo '===== YCSB_C  ====='
+echo 'LevelDB:'
+cat ycsb_leveldb_ycsb_c.txt | grep 'Timer 13 MEAN'
+echo 'WiscKey:'
+cat ycsb_wisckey_ycsb_c.txt | grep 'Timer 13 MEAN'
+echo 'DiffKV:'
+cat ycsb_diffkv_ycsb_c.txt | grep 'Timer 13 MEAN'
+echo 'Doux:'
+cat ycsb_doux_ycsb_c.txt | grep 'Timer 13 MEAN'
+
+
+echo '===== YCSB_D  ====='
+echo 'LevelDB:'
+cat ycsb_leveldb_ycsb_d.txt | grep 'Timer 13 MEAN'
+echo 'WiscKey:'
+cat ycsb_wisckey_ycsb_d.txt | grep 'Timer 13 MEAN'
+echo 'DiffKV:'
+cat ycsb_diffkv_ycsb_d.txt | grep 'Timer 13 MEAN'
+echo 'Doux:'
+cat ycsb_doux_ycsb_d.txt | grep 'Timer 13 MEAN'
+
+
+echo '===== YCSB_E  ====='
+echo 'LevelDB:'
+cat ycsb_leveldb_ycsb_e.txt | grep 'Timer 13 MEAN'
+echo 'WiscKey:'
+cat ycsb_wisckey_ycsb_e.txt | grep 'Timer 13 MEAN'
+echo 'DiffKV:'
+cat ycsb_diffkv_ycsb_e.txt | grep 'Timer 13 MEAN'
+echo 'Doux:'
+cat ycsb_doux_ycsb_e.txt | grep 'Timer 13 MEAN'
+
+
+echo '===== YCSB_F  ====='
+echo 'LevelDB:'
+cat ycsb_leveldb_ycsb_f.txt | grep 'Timer 13 MEAN'
+echo 'WiscKey:'
+cat ycsb_wisckey_ycsb_f.txt | grep 'Timer 13 MEAN'
+echo 'DiffKV:'
+cat ycsb_diffkv_ycsb_f.txt | grep 'Timer 13 MEAN'
+echo 'Doux:'
+cat ycsb_doux_ycsb_f.txt | grep 'Timer 13 MEAN'

@@ -417,14 +417,22 @@ class Compaction {
 
 
   // Maximum size of files to build during this compaction.
-  uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
+  uint64_t MaxOutputFileSize() const {
+    // if (adgMod::MOD >= 8) {
+    //   return (adgMod::key_size + 12) * max_output_file_size_ / (adgMod::key_size + adgMod::value_size);
+    // } else {
+    //   return max_output_file_size_;
+    // }
+    return max_output_file_size_;
+  }
 
   uint64_t MaxValueOutputFileSize() const {
-    uint64_t kv_size = adgMod::key_size + sizeof(uint64_t) 
-                     + 4 * sizeof(uint32_t);
-    uint64_t value_size = adgMod::key_size + sizeof(uint64_t) 
-                        + adgMod::value_size;
-    return (max_output_file_size_ / kv_size) * value_size;
+    // uint64_t kv_size = adgMod::key_size + sizeof(uint64_t) 
+    //                  + 4 * sizeof(uint32_t);
+    // uint64_t value_size = adgMod::key_size + sizeof(uint64_t) 
+    //                     + adgMod::value_size;
+    // return (max_output_file_size_ / kv_size) * value_size;
+    return max_output_file_size_;
   }
 
   // Is this a trivial compaction that can be implemented by just

@@ -70,8 +70,8 @@ void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_e
     std::default_random_engine e1(255);
     std::uniform_int_distribution<uint64_t> udist_within_key(0, num_entries - 1);
     std::uniform_int_distribution<uint64_t> udist_beyond_key(num_entries, 999999999999999);
-    zipfian_int_distribution<uint64_t> zipf_dist_within_key(0, num_entries - 1, 0.99);
-    zipfian_int_distribution<uint64_t> zipf_dist_beyond_key(num_entries, num_entries + num_operations, 0.99);
+    zipfian_int_distribution<uint64_t> zipf_dist_within_key(0, num_entries - 1, 0.9);
+    zipfian_int_distribution<uint64_t> zipf_dist_beyond_key(num_entries, num_entries + num_operations, 0.9);
     keys.reserve(num_operations);
 
     switch (workload_type) {
@@ -276,6 +276,12 @@ int main(int argc, char *argv[]) {
             std::vector<uint64_t> detailed_times;
             bool start_new_event = true;
 
+            // std::unordered_set<string> unique_keys;
+            // for (int i = 0; i < keys.size(); ++i) {
+            //     unique_keys.emplace(keys[i]);
+            // }
+            // cout << "keys.size: " << keys.size() << ", unique_keys.size: " << unique_keys.size() << endl;
+
             instance->StartTimer(13);
             for (int i = 0; i < num_operations; ++i) {
                 if (start_new_event) {
@@ -292,6 +298,7 @@ int main(int argc, char *argv[]) {
                         instance->StartTimer(10);
                         status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
                         instance->PauseTimer(10);
+                        adgMod::put_idx.emplace_back(i);
                         break;
                     }
                     case WorkloadType::Get: {
@@ -314,7 +321,10 @@ int main(int argc, char *argv[]) {
                         // Scan
                         instance->StartTimer(17);
                         for (int r = 0; r < length_range; ++r) {
-                            if (!db_iter->Valid()) break;
+                            if (!db_iter->Valid()) {
+                                // std::cout << "cur range: " << r << std::endl;
+                                break;
+                            }
                             Slice key = db_iter->key();
                             string value = db_iter->value().ToString();
                             db_iter->Next();
@@ -325,11 +335,12 @@ int main(int argc, char *argv[]) {
                     case WorkloadType::YCSB_A: {
                         // Update Heavy
                         // 50% updates, 50% reads
-                        if (i < 0.5 * num_operations) {
+                        if (i > 0.5 * num_operations) {
                             string value = generate_value(uniform_dist_value(e2));
                             instance->StartTimer(10);
                             status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
                             instance->PauseTimer(10);
+                            adgMod::put_idx.emplace_back(i);
                         } else {
                             string value;
                             instance->StartTimer(4);
@@ -349,6 +360,7 @@ int main(int argc, char *argv[]) {
                             instance->StartTimer(10);
                             status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
                             instance->PauseTimer(10);
+                            adgMod::put_idx.emplace_back(i);
                         } else {
                             string value;
                             instance->StartTimer(4);
@@ -380,6 +392,7 @@ int main(int argc, char *argv[]) {
                             instance->StartTimer(10);
                             status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
                             instance->PauseTimer(10);
+                            adgMod::put_idx.emplace_back(i);
                         } else {
                             string value;
                             instance->StartTimer(4);
@@ -399,6 +412,7 @@ int main(int argc, char *argv[]) {
                             instance->StartTimer(10);
                             status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
                             instance->PauseTimer(10);
+                            adgMod::put_idx.emplace_back(i);
                         } else {
                             // Seek
                             instance->StartTimer(4);
@@ -435,6 +449,7 @@ int main(int argc, char *argv[]) {
                             instance->StartTimer(10);
                             status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
                             instance->PauseTimer(10);
+                            adgMod::put_idx.emplace_back(i);
                         } else {
                             string value;
                             instance->StartTimer(4);

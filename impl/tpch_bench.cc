@@ -59,9 +59,9 @@ enum Lineitem {
     l_shipdate = 10,    
     l_commitdate = 11,   
     l_receiptdate = 12,
-    l_shipinstruct = 14, 
-    l_shipmode = 15,     
-    l_comment = 16     
+    l_shipinstruct = 13, 
+    l_shipmode = 14,     
+    l_comment = 15     
 };
 
 
@@ -103,11 +103,16 @@ std::uniform_int_distribution<> distribution(1, 999);
 
 void EncodeRow(const vector<string>& row, string* key, string* value) {
     // Encode key
-    uint64_t orderkey = 0, linenumber = 0;
-    orderkey = std::stoull(row[l_orderkey].c_str(), nullptr, 10);
-    linenumber = std::stoull(row[l_linenumber].c_str(), nullptr, 10);
-    PutFixed64(key, orderkey);
-    PutFixed64(key, linenumber);
+    key->append(fill_key(row[l_orderkey], 8));
+    key->append(fill_key(row[l_linenumber], 8));
+
+    // uint64_t orderkey = 0, linenumber = 0;
+    // orderkey = std::stoull(row[l_orderkey].c_str(), nullptr, 10);
+    // linenumber = std::stoull(row[l_linenumber].c_str(), nullptr, 10);
+    // PutFixed64(key, orderkey);
+    // PutFixed64(key, linenumber);
+    // cout << "row[l_orderkey]: " << row[l_orderkey] << ", row[l_linenumber]: " << row[l_linenumber] << endl;
+    // cout << "orderkey: " << orderkey << ", linenumer: " << linenumber << endl;
 
     // Encode values
     uint32_t shipdate = 0;
@@ -175,7 +180,7 @@ int main(int argc, char *argv[]) {
     commandline_options.add_options()
             ("f,input_file", "the filename of input file", cxxopts::value<string>(input_filename)->default_value(""))
             ("m,modification", "if set, run our modified version", cxxopts::value<int>(adgMod::MOD)->default_value("0"))
-            ("i,iteration", "the number of iterations of a same size", cxxopts::value<int>(num_iteration)->default_value("1"))
+            ("i,iteration", "the number of iterations of a same size", cxxopts::value<int>(num_iteration)->default_value("0"))
             ("h,help", "print help message", cxxopts::value<bool>()->default_value("false"))
             ("d,directory", "the directory of db", cxxopts::value<string>(db_location)->default_value("/mnt/doux/testdb"))
             ("init_db", "init database", cxxopts::value<bool>(fresh_write)->default_value("false"))
@@ -186,15 +191,17 @@ int main(int argc, char *argv[]) {
             ("filter", "use filter", cxxopts::value<bool>(adgMod::use_filter)->default_value("false"))
             ("start1", "start for attribute 1", cxxopts::value<uint32_t>(start1)->default_value("1"))
             ("end1", "end for attribute 1", cxxopts::value<uint32_t>(end1)->default_value("10"))
-            ("start2", "start for attribute 1", cxxopts::value<uint32_t>(start2)->default_value("1"))
-            ("end2", "end for attribute 1", cxxopts::value<uint32_t>(end2)->default_value("10"));
+            ("start2", "start for attribute 2", cxxopts::value<uint32_t>(start2)->default_value("1"))
+            ("end2", "end for attribute 2", cxxopts::value<uint32_t>(end2)->default_value("10"));
 
     auto result = commandline_options.parse(argc, argv);
     if (result.count("help")) {
         printf("%s", commandline_options.help().c_str());
         exit(0);
     }
-
+    
+    adgMod::key_size = 16;
+    adgMod::value_size = 314;
     adgMod::fd_limit = unlimit_fd ? 1024 * 1024 : 1024;
     DB* db;
     Options options;
@@ -210,14 +217,17 @@ int main(int argc, char *argv[]) {
     read_options.end2 = end2;
     read_options.start = doux::MortonCode<2, 32>::Encode({start1, start2}).data_;
     read_options.end = doux::MortonCode<2, 32>::Encode({end1, end2}).data_;
+    doux::AABB<2, 32> aabb = {read_options.start, read_options.end};
+    doux::Region<2, 32> region = aabb.ToIntervals();
+
     adgMod::Stats* instance = adgMod::Stats::GetInstance();
     vector<vector<size_t>> times(20);
     instance->ResetAll();
 
+    cout << "input_filename: " << input_filename << ", fresh_write: " << fresh_write << endl;
     if (!input_filename.empty() && fresh_write) {
         string command = "rm -rf " + db_location;
         system(command.c_str());
-        system("sudo fstrim -a -v");
         system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
         cout << "delete and trim complete" << endl;
 
@@ -227,15 +237,23 @@ int main(int argc, char *argv[]) {
         ifstream input(input_filename);
         string src;
         vector<string> row;
-        while (input >> src) {
+        while (getline(input, src)) {
+            // cout << src << endl;
             splitRow(src, row);
+            // for (int i = 0; i < row.size(); i++) {
+            //     cout << row[i] << endl;
+            // }
+            // cout << endl;
             string key, value;
             EncodeRow(row, &key, &value);
+            // cout << "key: " << key << ", value: " << value << endl; 
 
             instance->StartTimer(9);
             status = db->Put(write_options, key, value);
             assert(status.ok() && "File Put Error");
             instance->PauseTimer(9, true);
+
+            row.clear();
         }
 
         cout << "Put Complete" << endl;
@@ -246,16 +264,16 @@ int main(int argc, char *argv[]) {
         delete db;
     }
 
+    
     for (size_t iteration = 0; iteration < num_iteration; ++iteration) {
-        if (iteration == 0) {
-            string command = "rm -rf " + db_location;
-            system(command.c_str());
-            system("sudo fstrim -a -v");
+        if (evict) {
             system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches");
-            cout << "delete and trim complete" << endl;
+            cout << "Drop all caches" << endl;
         }
 
-        cout << "Starting up" << endl;
+        cout << "Starting up!" << endl;
+        cout << "Dim 1 from " << read_options.start1 << " to " << read_options.end1 << endl;
+        cout << "Dim 2 from " << read_options.start2 << " to " << read_options.end2 << endl; 
         status = DB::Open(options, db_location, &db);
         assert(status.ok() && "Open Error");
         adgMod::db->WaitForBackground();
@@ -268,14 +286,13 @@ int main(int argc, char *argv[]) {
             db_iter->SeekToFirst();
             instance->PauseTimer(4);
 
-            VLog* vlog = new adgMod::VLog(db_location + "/vlog.txt");
             instance->StartTimer(17);
             for (; db_iter->Valid(); db_iter->Next()) {
                 Slice key = db_iter->key();
                 Slice value = db_iter->value();
                 uint64_t value_address = DecodeFixed64(value.data());
                 uint32_t value_size = DecodeFixed32(value.data() + sizeof(uint64_t));
-                string res = vlog->ReadRecord(value_address, value_size);
+                string res = adgMod::db->vlog->ReadRecord(value_address, value_size);
                 uint32_t attr1 = DecodeFixed32(res.data());
                 uint32_t attr2 = DecodeFixed32(res.data() + sizeof(uint32_t));
                 if (start1 <= attr1 && attr1 <= end1 && start2 <= attr2 && attr2 <= end2) {
@@ -283,7 +300,6 @@ int main(int argc, char *argv[]) {
                 }
             }
             instance->PauseTimer(17);
-            delete vlog;
         } else if (adgMod::MOD == 9) {
             db_iter = db->NewVIterator(read_options);
             instance->StartTimer(4);
@@ -298,6 +314,13 @@ int main(int argc, char *argv[]) {
             }
             instance->PauseTimer(17);
         } else if (adgMod::MOD == 10) {
+            uint64_t scan_len = 0;
+            cout << "Morton code from " << read_options.start << " to "  << read_options.end << endl;
+            for (const auto interval : region.intervals_) {
+                cout << "interval from " << interval.start_ << " to " << interval.end_ << endl;
+                scan_len += interval.end_ - interval.start_;
+            }
+            cout << "scan length: " << scan_len << endl;
             db_iter = db->NewVIterator(read_options);
             instance->StartTimer(4);
             db_iter->Seek(Slice());

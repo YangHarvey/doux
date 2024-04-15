@@ -87,6 +87,7 @@ namespace adgMod {
 //bool SearchNumEntriesArray(const std::vector<uint64_t>& num_entries_array, const uint64_t position, size_t* index, uint64_t* relative_position);
     string generate_key(const string& key);
     string generate_value(uint64_t value);
+    string fill_key(const string& key, size_t sz);
     string fill_value(const string& value, size_t sz);
     uint64_t SliceToInteger(const Slice& slice);
     int compare(const Slice& slice, const string& string);

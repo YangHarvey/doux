@@ -7,7 +7,7 @@ using std::to_string;
 
 namespace adgMod {
 
-    int MOD = 5;
+    int MOD = 0;
     bool string_mode = true;
     uint64_t key_multiple = 1;
     uint32_t model_error = 10;
@@ -45,7 +45,7 @@ namespace adgMod {
     uint64_t block_size = 0;
     uint64_t entry_size = 0;
     uint64_t max_merged_size = 128 * 1024 * 1024;
-    uint64_t small_file_allowed = 20;
+    uint64_t small_file_allowed = 128;
     uint64_t level_compaction_limit = 100;
     uint64_t invalid_limit = 10;
 
@@ -93,6 +93,11 @@ namespace adgMod {
     string generate_value(uint64_t value) {
         string value_string = to_string(value);
         string result = string(value_size - value_string.length(), '0') + value_string;
+        return std::move(result);
+    }
+
+    string fill_key(const string& key, size_t sz) {
+        string result = string(sz - key.length(), '0') + key;
         return std::move(result);
     }
 

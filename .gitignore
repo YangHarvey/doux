@@ -4,3 +4,5 @@ evaluation/
 eval/
 eval_micro/
 eval_ycsb/
+eval_ycsb_1/
+eval_tpch/
