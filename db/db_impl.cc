@@ -2142,6 +2142,33 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
   } 
 }
 
+Status DBImpl::sPut(const WriteOptions& o, const Slice& key, const Slice& skey, const Slice& value) {
+  if(adgMod::MOD != 11) {
+    Put(o, key, value);
+  }
+  uint64_t value_address = adgMod::db->vlog->AddRecord(key, value);
+
+  /*
+    primary index
+  */
+  char buffer[sizeof(uint64_t) + sizeof(uint32_t)];
+  EncodeFixed64(buffer, value_address);
+  EncodeFixed32(buffer + sizeof(uint64_t), value.size());
+  Status status1 = DB::Put(o, key, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
+  /*
+    secondary index
+  */
+  size_t total_size = adgMod::sidx_perfix.size() + skey.size() + key.size();
+  char *skey_buffer = new char[total_size];
+  memcpy(skey_buffer, adgMod::sidx_perfix.data(), adgMod::sidx_perfix.size());
+  memcpy(skey_buffer + adgMod::sidx_perfix.size(), skey.data(), skey.size());
+  memcpy(skey_buffer + adgMod::sidx_perfix.size() + skey.size(), key.data(), key.size());
+  Status status2 = DB::Put(o, (Slice) {skey_buffer, total_size}, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
+  delete skey_buffer;
+  
+  return status2;
+}
+
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   return DB::Delete(options, key);
 }

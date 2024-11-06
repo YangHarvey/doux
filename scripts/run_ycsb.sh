@@ -1,10 +1,18 @@
 #!/bin/bash
 cd ../build
-source /opt/rh/devtoolset-9/enable
+# source /opt/rh/devtoolset-9/enable
 
 rm -rf *
-cmake ../../doux -DCMAKE_C_COMPILER=/opt/rh/devtoolset-9/root/bin/gcc -DCMAKE_CXX_COMPILER=/opt/rh/devtoolset-9/root/bin/g++ -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
+cmake ../../doux -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 make -j
+
+
+mkdir -p /home/lyu/data/ycsb_leveldb
+mkdir -p /home/lyu/data/ycsb_wisckey
+mkdir -p /home/lyu/data/ycsb_diffkv
+mkdir -p /home/lyu/data/ycsb_doux
+mkdir -p ../eval_ycsb_1/
+
 
 # LevelDB
 # Insert

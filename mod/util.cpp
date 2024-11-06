@@ -17,6 +17,8 @@ namespace adgMod {
     int key_size;
     int value_size;
 
+    leveldb::Slice sidx_perfix = "sidx_";
+
     leveldb::Env* env;
     leveldb::DBImpl* db;
     leveldb::ReadOptions read_options;

@@ -249,7 +249,14 @@ int main(int argc, char *argv[]) {
             // cout << "key: " << key << ", value: " << value << endl; 
 
             instance->StartTimer(9);
-            status = db->Put(write_options, key, value);
+            if(adgMod::MOD <= 10) {
+                status = db->Put(write_options, key, value);
+            } else {
+                status = db->sPut(write_options, key, , value);
+            }
+            
+
+
             assert(status.ok() && "File Put Error");
             instance->PauseTimer(9, true);
 

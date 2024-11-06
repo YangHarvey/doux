@@ -203,6 +203,10 @@ int main(int argc, char *argv[]) {
             status = DB::Open(options, db_location, &db);
             assert(status.ok() && "Open Error");
 
+
+            /*
+                load data
+            */
             instance->StartTimer(9);
             int cut_size = keys.size() / 100000;
             std::vector<std::pair<int, int>> chunks;
@@ -259,7 +263,10 @@ int main(int argc, char *argv[]) {
             cout << "Drop all caches" << endl;
         }
 
-
+        
+        /*
+            exec workload
+        */
         if (!fresh_write || iteration > 0) {
             // Prepare keys for later workloads
             keys.clear();

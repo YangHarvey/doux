@@ -36,6 +36,8 @@ namespace adgMod {
     extern int key_size;
     extern int value_size;
 
+    extern leveldb::Slice sidx_perfix;
+
     extern leveldb::Env* env;
     extern leveldb::DBImpl* db;
     extern leveldb::ReadOptions read_options;
