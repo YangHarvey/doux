@@ -2138,11 +2138,12 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
     char buffer[sizeof(uint64_t) + sizeof(uint32_t)];
     EncodeFixed64(buffer, value_address);
     EncodeFixed32(buffer + sizeof(uint64_t), val.size());
+    // std::cout << "key: " << key.ToString() << ", value_address: " << value_address << ", value_size: " << val.size() << std::endl;
     return DB::Put(o, key, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
   } 
 }
 
-Status DBImpl::sPut(const WriteOptions& o, const Slice& key, const Slice& skey, const Slice& value) {
+Status DBImpl::sPut(const WriteOptions& o, const Slice& key, const Slice &skey, const std::string& value) {
   if(adgMod::MOD != 11) {
     Put(o, key, value);
   }

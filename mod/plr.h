@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <cstdint>
 #include <deque>
 
 // Code modified from https://github.com/RyanMarcus/plr

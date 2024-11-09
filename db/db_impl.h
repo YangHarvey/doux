@@ -60,10 +60,10 @@ class DBImpl : public DB {
   virtual void CompactRange(const Slice* begin, const Slice* end);
 
   // with secondary index
-  virtual Status sPut(const WriteOptions&, const Slice& key, const Slice& skey, const Slice& value);
+  virtual Status sPut(const WriteOptions& options, const Slice& key, const Slice &skey, const std::string& value);
   // virtual Status sGet(const ReadOptions& options, const Slice& key, const Slice &skey, std::string* value);
-  virtual Status sScan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
-                    uint64_t length_range, std::vector<std::string>& res);
+  // virtual Status sScan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
+  //                   uint64_t length_range, std::vector<std::string>& res);
 
   // Extra methods (for testing) that are not in the public DB interface
 
