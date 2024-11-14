@@ -12,7 +12,7 @@ const int buffer_size_max = 300 * 1024;
 
 namespace adgMod {
 
-VLog::VLog(const std::string& vlog_name) : writer(nullptr), reader(nullptr) {
+VLog::VLog(const std::string& vlog_name) : vlog_name(vlog_name), writer(nullptr), reader(nullptr) {
     adgMod::env->NewWritableFile(vlog_name, &writer);
     adgMod::env->NewRandomAccessFile(vlog_name, &reader);
     buffer.reserve(buffer_size_max * 2);
@@ -34,7 +34,7 @@ uint64_t VLog::AddRecord(const Slice& key, const Slice& value) {
 
 string VLog::ReadRecord(uint64_t address, uint32_t size) {
     if (address >= vlog_size) return string(buffer.c_str() + address - vlog_size, size);
-
+    
     Slice value;
     reader->Read(address, size, &value, scratch);
     string result(value.data(), value.size());
@@ -63,6 +63,32 @@ void VLog::Sync() {
     Flush();
     writer->Sync();
 }
+
+
+void VLog::Reset() {
+    // Step 1: Clear the internal buffer
+    buffer.clear();
+    vlog_size = 0;  // Reset log size to 0
+
+    
+    // Step 2: Delete the existing file
+    writer->Close();
+    int status = remove(vlog_name.c_str());
+    if (status != 0) {
+        // Handle error in case file deletion fails
+        std::cerr << "Error deleting file: " << vlog_name << std::endl;
+        return;
+    }
+
+    // Step 3: Recreate the file
+    adgMod::env->NewWritableFile(vlog_name, &writer);
+    adgMod::env->NewRandomAccessFile(vlog_name, &reader);
+    scratch = new char[adgMod::value_size];  // Reallocate scratch buffer
+
+    // Optionally log the reset operation
+    std::cout << "VLog reset successfully for: " << vlog_name << std::endl;
+}
+
 
 VLog::~VLog() {
     Flush();

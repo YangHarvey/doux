@@ -165,6 +165,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
         adgMod::db = this;
         vlog = new adgMod::VLog(dbname_ + "/vlog.txt");
         cold_vlog = new adgMod::VLog(dbname_ + "/cold_vlog.txt");
+
+        // RISE: grouped value log
+        grouped_vlog = new adgMod::GroupValueLog(dbname_ + "/grouped_vlog.txt");
       }
 
 DBImpl::~DBImpl() {
@@ -977,6 +980,69 @@ void DBImpl::ReclaimVLog() {
   }
   adgMod::cur_progress = pos;
   // std::cout << "Reclaim vlog: " << reclaimNum << " entries" << std::endl;
+}
+
+void DBImpl::RunCoLocationGC() {
+    for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
+      // read all data from group
+      std::vector<std::pair<leveldb::Slice, leveldb::Slice>> valid_records;
+      uint64_t group_log_size = grouped_vlog->group_vlogs[group_index]->getVlogsize();
+      uint64_t offset = 0;
+
+      leveldb::Slice key, value;
+
+      while (offset < group_log_size) {
+        uint32_t key_size;
+        uint32_t value_size;
+
+        // Read the key size and value size
+        auto key_size_slice = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, sizeof(uint32_t));
+        key_size = DecodeFixed32(key_size_slice.data());
+        offset += sizeof(uint32_t);
+
+        // Read the key
+        key = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, key_size);
+        offset += key_size;
+
+        // Read the value size
+        auto value_size_slice = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, sizeof(uint32_t));
+        value_size = DecodeFixed32(value_size_slice.data());
+        offset += sizeof(uint32_t);
+
+        // Read the value
+        value = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, value_size);
+        offset += value_size;
+
+        // Step 3: Validate the record
+        if (true) {
+            // Add valid records to the list
+            valid_records.emplace_back(key, value);
+        }
+      }
+      grouped_vlog->group_vlogs[group_index]->Reset();
+
+
+      std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
+        return a.first.ToString() < b.first.ToString();  // Sort by the key (or you can use another sorting criterion)
+      });
+
+
+      for (const auto& record : valid_records) {
+        auto vaddr = grouped_vlog->AddRecord(record.first, record.second);
+        
+        char buffer[sizeof(int) + sizeof(uint64_t) + sizeof(uint32_t)];
+        EncodeFixed32(buffer, vaddr.first);       // Group index
+        EncodeFixed64(buffer + sizeof(int), vaddr.second);  // Address
+        EncodeFixed32(buffer + sizeof(int) + sizeof(uint64_t), record.second.size()); // Value size
+
+        // Optionally print the progress (for debugging)
+        std::cout << "Put: < " <<  vaddr.first << ", " << vaddr.second << ", " << record.second.size() << ">" << std::endl;
+
+        // Step 7: Update the LSM-tree with the new addresses
+        WriteOptions o;
+        DB::Put(o, record.first, leveldb::Slice(buffer, sizeof(buffer)));
+    }
+  }
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -1942,6 +2008,18 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);
 #endif  
+    } else if (adgMod::MOD == 12 && s.ok()) {
+      // RISE
+#ifdef INTERNAL_TIMER
+        instance->StartTimer(12);
+#endif
+        int group_index = DecodeFixed32(value->c_str());
+        uint64_t value_address = DecodeFixed64(value->c_str() + sizeof(uint32_t));
+        uint32_t value_size = DecodeFixed32(value->c_str() + sizeof(uint64_t) + sizeof(uint32_t));
+        *value = std::move(grouped_vlog->ReadRecord(group_index, value_address, value_size));
+#ifdef INTERNAL_TIMER
+        instance->PauseTimer(12);
+#endif
     }
     mutex_.Lock();
   }
@@ -2127,9 +2205,39 @@ void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
 
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  if (adgMod::MOD <= 6 || adgMod::MOD >= 9) {
+  if (adgMod::MOD <= 6 || adgMod::MOD == 9 || adgMod::MOD == 10) {
+    // leveldb || diffkv (9) || doux (10)
     return DB::Put(o, key, val);
-  } else {
+  } else if (adgMod::MOD == 12) {
+    // RISE
+    std::lock_guard<std::mutex> lock(gc_mutex); 
+    
+    // co-location GC
+    static int write_count = 0;  // Static counter to keep track of writes
+    const int GC_THRESHOLD = 10000;  // Threshold for triggering GC
+
+    string value;
+    ReadOptions read_options;
+    auto s = PreGet(read_options, key, &value);
+    if(s.ok()) {
+      // delete the old value in decoupled secondary index
+    }
+
+    write_count++;
+    if (write_count >= GC_THRESHOLD) {
+        RunCoLocationGC();
+        write_count = 0;  // Reset the counter after GC
+    }
+
+    auto vaddr = grouped_vlog->AddRecord(key, val);
+    char buffer[sizeof(int) + sizeof(uint64_t) + sizeof(uint32_t)];
+    EncodeFixed32(buffer, vaddr.first);
+    EncodeFixed64(buffer + sizeof(int), vaddr.second);
+    EncodeFixed32(buffer + sizeof(int) + sizeof(uint64_t), val.size());
+    // std::cout << "Put: < " <<  vaddr.first << ", " << vaddr.second << ", " << val.size() << ">" << std::endl;
+    return DB::Put(o, key, (Slice) {buffer, sizeof(int) + sizeof(uint64_t) + sizeof(uint32_t)});
+  }
+  else {
     // adgMod::MOD == 7 (Bourbon) || adgMod::MOD == 8 (WiscKey)
     // if (adgMod::put_idx.size() % (adgMod::keys.size() / 10) == 0) {
     //   ReclaimVLog();
@@ -2213,6 +2321,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
             sync_error = true;
           }
         }
+      } else if(adgMod::MOD == 11) {
+        // 
       }
 
       if (status.ok()) {

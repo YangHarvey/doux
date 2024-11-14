@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mod/Vlog.h>
+#include <mutex>
 
 #include "db/dbformat.h"
 #include "db/log_writer.h"
@@ -23,6 +24,7 @@
 #include "port/port.h"
 #include "port/thread_annotations.h"
 #include "impl/dependency.h"
+#include "mod/GroupedValueLog.h"
 
 namespace leveldb {
 
@@ -97,6 +99,9 @@ class DBImpl : public DB {
   std::atomic<int> version_count;
   adgMod::VLog* vlog;
   adgMod::VLog* cold_vlog;
+
+  // RISE
+  adgMod::GroupValueLog *grouped_vlog;
 
 private:
   friend class DB;
@@ -174,6 +179,7 @@ private:
   void BackgroundCall();
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void ReclaimVLog();
+  void RunCoLocationGC();
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupVCompaction(CompactionState* compact)
@@ -213,6 +219,7 @@ private:
 
   // State below is protected by mutex_
   port::Mutex mutex_;
+  std::mutex gc_mutex;
   std::atomic<bool> shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   MemTable* mem_;

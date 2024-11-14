@@ -8,7 +8,11 @@ using namespace leveldb;
 namespace adgMod {
 
 class VLog {
+friend class GroupValueLog;
+friend class DBImpl;
 private:
+    std::string vlog_name;
+
     WritableFile* writer;
     RandomAccessFile* reader;
     std::string buffer;
@@ -19,12 +23,18 @@ private:
     void Flush();
     void Validate();
 
+
+
 public:
     explicit VLog(const std::string& vlog_name);
     uint64_t AddRecord(const Slice& key, const Slice& value);
     std::string ReadRecord(uint64_t address, uint32_t size);
     Slice ReadRecord2(uint64_t address, uint32_t size);
     void Sync();
+    // reset write file
+    void Reset();
+
+    uint64_t getVlogsize() { return vlog_size; }
     ~VLog();
 };
 
