@@ -465,13 +465,10 @@ int main(int argc, char *argv[]) {
                     std::cout << "secondary start: " << secondary_start << ", secondary_end: " << secondary_end << std::endl;
 
                     db_iter = db->NewIterator(read_options);
-                    std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
                     instance->StartTimer(4);
                     db_iter->Seek(secondary_start);
                     instance->PauseTimer(4);
-
-                    std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
                     if (db_iter->Valid()) {
                         std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
@@ -479,20 +476,14 @@ int main(int argc, char *argv[]) {
                         std::cout << "No valid key found after Seek." << std::endl;
                     }
 
-                    std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
-
                     instance->StartTimer(17);
                     for (; db_iter->Valid(); db_iter->Next()) {
                         Slice secondary_key = db_iter->key();
                         Slice primary_key = db_iter->value();
 
-                        // std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
-
 
                         string value;
                         Status s = db->Get(ReadOptions(), primary_key, &value);
-
-                        std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
                         // if find the value
                         if(s.ok()) {

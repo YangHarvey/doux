@@ -20,18 +20,18 @@ GroupValueLog::~GroupValueLog() {
     }
 }
 
-int GroupValueLog::GetGroupIndex(const leveldb::Slice& key) {
+uint32_t GroupValueLog::GetGroupIndex(const leveldb::Slice& key) {
     // Hash the key to determine the group index
     std::hash<std::string> hasher;
     return hasher(key.ToString()) % num_groups;
 }
 
-std::pair<int, uint64_t> GroupValueLog::AddRecord(const leveldb::Slice& key, const leveldb::Slice& value) {
+std::pair<uint32_t, uint64_t> GroupValueLog::AddRecord(const leveldb::Slice& key, const leveldb::Slice& value) {
     // Determine the group index for the key
-    int group_index = GetGroupIndex(key);
+    uint32_t group_index = GetGroupIndex(key);
 
     // Add the record to the appropriate VLog and get the address
-    uint64_t address = group_vlogs[group_index]->AddRecord(key, value);
+    uint64_t address = group_vlogs[group_index]->AddRecord2(key, value);
 
     // Return the group index and the address within the VLog
     return {group_index, address};

@@ -983,13 +983,20 @@ void DBImpl::ReclaimVLog() {
 }
 
 void DBImpl::RunCoLocationGC() {
-    for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
+
+    for(int i = 0; i < grouped_vlog->num_groups / 10; i++) {
+      // random一个group num
+      int group_index = rand() % grouped_vlog->num_groups;
+      std::cout << "group index: " << group_index << std::endl;
+    // for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
       // read all data from group
       std::vector<std::pair<leveldb::Slice, leveldb::Slice>> valid_records;
       uint64_t group_log_size = grouped_vlog->group_vlogs[group_index]->getVlogsize();
       uint64_t offset = 0;
 
       leveldb::Slice key, value;
+
+  
 
       while (offset < group_log_size) {
         uint32_t key_size;
@@ -1019,13 +1026,13 @@ void DBImpl::RunCoLocationGC() {
             valid_records.emplace_back(key, value);
         }
       }
-      grouped_vlog->group_vlogs[group_index]->Reset();
+  
 
+      grouped_vlog->group_vlogs[group_index]->Reset();
 
       std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
         return a.first.ToString() < b.first.ToString();  // Sort by the key (or you can use another sorting criterion)
       });
-
 
       for (const auto& record : valid_records) {
         auto vaddr = grouped_vlog->AddRecord(record.first, record.second);
@@ -1036,12 +1043,14 @@ void DBImpl::RunCoLocationGC() {
         EncodeFixed32(buffer + sizeof(int) + sizeof(uint64_t), record.second.size()); // Value size
 
         // Optionally print the progress (for debugging)
-        std::cout << "Put: < " <<  vaddr.first << ", " << vaddr.second << ", " << record.second.size() << ">" << std::endl;
+        // std::cout << "Put: < " <<  vaddr.first << ", " << vaddr.second << ", " << record.second.size() << ">" << std::endl;
 
         // Step 7: Update the LSM-tree with the new addresses
         WriteOptions o;
         DB::Put(o, record.first, leveldb::Slice(buffer, sizeof(buffer)));
     }
+
+
   }
 }
 
@@ -2013,7 +2022,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 #ifdef INTERNAL_TIMER
         instance->StartTimer(12);
 #endif
-        int group_index = DecodeFixed32(value->c_str());
+        uint32_t group_index = DecodeFixed32(value->c_str());
         uint64_t value_address = DecodeFixed64(value->c_str() + sizeof(uint32_t));
         uint32_t value_size = DecodeFixed32(value->c_str() + sizeof(uint64_t) + sizeof(uint32_t));
         *value = std::move(grouped_vlog->ReadRecord(group_index, value_address, value_size));
@@ -2149,6 +2158,18 @@ void DBImpl::Scan(const ReadOptions& options, const Slice& key, const std::vecto
           current->GetFromVFile(options, lkey, &cur_res, file_number, file_size,
                                 block_number, block_offset, &stats);
         }
+        res.push_back(cur_res);
+#ifdef INTERNAL_TIMER
+        instance->PauseTimer(12);
+#endif
+      }else if (adgMod::MOD == 12) {
+#ifdef INTERNAL_TIMER
+        instance->StartTimer(12);
+#endif  
+        uint32_t group_index = DecodeFixed32(values[i].c_str());
+        uint64_t value_address = DecodeFixed64(values[i].c_str() + sizeof(uint32_t));
+        uint32_t value_size = DecodeFixed32(values[i].c_str() + sizeof(uint64_t) + sizeof(uint32_t));
+        cur_res = std::move(grouped_vlog->ReadRecord(group_index, value_address, value_size));
         res.push_back(cur_res);
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);

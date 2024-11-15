@@ -17,7 +17,7 @@ public:
     ~GroupValueLog();
 
     // Method to add a record (key, value) and return the group number and address
-    std::pair<int, uint64_t> AddRecord(const leveldb::Slice& key, const leveldb::Slice& value);
+    std::pair<uint32_t, uint64_t> AddRecord(const leveldb::Slice& key, const leveldb::Slice& value);
 
     // Method to read a record using group number and address
     std::string ReadRecord(int group_num, uint64_t address, uint32_t size);
@@ -38,7 +38,7 @@ public:
     std::vector<VLog*> group_vlogs;
 
     // Helper function to determine the group index based on the key
-    int GetGroupIndex(const leveldb::Slice& key);
+    uint32_t GetGroupIndex(const leveldb::Slice& key);
 };
 
 }  // namespace adgMod

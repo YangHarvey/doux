@@ -1,6 +1,8 @@
 #ifndef LEVELDB_VLOG_H
 #define LEVELDB_VLOG_H
 
+#include <mutex>
+
 #include "leveldb/env.h"
 
 using namespace leveldb;
@@ -20,6 +22,8 @@ private:
     uint64_t curr_addr;
     char* scratch;
 
+    std::mutex log_mutex;
+
     void Flush();
     void Validate();
 
@@ -28,6 +32,7 @@ private:
 public:
     explicit VLog(const std::string& vlog_name);
     uint64_t AddRecord(const Slice& key, const Slice& value);
+    uint64_t AddRecord2(const Slice& key, const Slice& value); // 定长record
     std::string ReadRecord(uint64_t address, uint32_t size);
     Slice ReadRecord2(uint64_t address, uint32_t size);
     void Sync();
