@@ -9,30 +9,32 @@ lineitem1=/projects/tpch-data/lineitem.tbl.1
 lineitem10=/projects/tpch-data/lineitem.tbl.10
 
 # working directory
-LevelDB_DIR=/projects/doux/tpch_leveldb
-LevelDB_SI_DIR=/projects/doux/tpch_leveldb_si
-Wisckey_DIR=/projects/doux/tpch_wisckey
-DiffKV_DIR=/projects/doux/tpch_diffkv
+LevelDB_DIR=/projects/doux/tpch/leveldb_dir
+LevelDB_SI_DIR=/projects/doux/tpch/leveldb_si_dir
+Wisckey_DIR=/projects/doux/tpch/wisckey_dir
+DiffKV_DIR=/projects/doux/tpch/diffkv_dir
+RISE_DIR=/projects/doux/tpch/rise_dir
 
 # output
-LevelDB_OUTPUT=../eval_tpch_1/leveldb_output.txt
-LevelDB_SI_OUTPUT=../eval_tpch_1/leveldb_si_output.txt
+LevelDB_OUTPUT=/projects/doux/tpch/leveldb_output
+LevelDB_SI_OUTPUT=/projects/doux/tpch/leveldb_si_output
+RISE_OUTPUT=/projects/doux/tpch/rise_output
 
 mkdir -p ${LevelDB_DIR}
 mkdir -p ${LevelDB_SI_DIR}
 mkdir -p ${Wisckey_DIR}
 mkdir -p ${DiffKV_DIR}
-mkdir -p ../eval_tpch_1/
+
+mkdir -p ${LevelDB_OUTPUT}
+mkdir -p ${LevelDB_SI_OUTPUT}
+mkdir -p ${RISE_OUTPUT}
 
 
+# TPC-H Q6
 # LevelDB
-# ./tpch_bench --init_db -t 6 -f $lineitem10 -m 0 -i 10 -d $LevelDB_DIR > $LevelDB_OUTPUT
-
+./tpch_bench --init_db -t 6 -f $lineitem1 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q6.txt
 # LevelDB(SI)
-./tpch_bench --init_db --si -t 6 -f $lineitem1 -m 1 -i 10 -d $LevelDB_DIR > $LevelDB_SI_OUTPUT
+./tpch_bench --init_db --si -t 6 -f $lineitem1 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_SI_OUTPUT/tpch_q6.txt
+# RISE(DSI)
+./tpch_bench --init_db --si -t 6 -f $lineitem1 -m 12 -i 5 -d $LevelDB_DIR > $RISE_OUTPUT/tpch_q6.txt
 
-# Wisckey
-# ./tpch_bench --init_db -t 6 -f $lineitem1 -m 8 -i 10 -d $Wisckey_DIR
-
-# Diffkv
-# ./tpch_bench --init_db -t 6 -f $lineitem1 -m 9 -i 10 -d $DiffKV_DIR

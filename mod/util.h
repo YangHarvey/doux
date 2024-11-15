@@ -27,6 +27,7 @@ namespace adgMod {
     class FileStats;
 
     extern int MOD;
+    extern bool use_secondary_index;
     extern bool string_mode;
     extern uint64_t key_multiple;
     extern uint32_t model_error;

@@ -11,3 +11,4 @@ tpch_leveldb/
 tpch_diffkv/
 tpch_wisckey/
 ycsb/
+tpch/

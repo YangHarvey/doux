@@ -70,8 +70,8 @@ class LEVELDB_EXPORT DB {
   virtual Status Put(const WriteOptions& options, const Slice& key,
                      const Slice& value) = 0;
                     
-  // virtual Status sPut(const WriteOptions& options, const Slice& key, const Slice &skey,
-  //                    const std::string& value) = 0;
+  virtual Status sPut(const WriteOptions& options, const Slice& key, const Slice &skey,
+                     const std::string& value) = 0;
 
   // Remove the database entry (if any) for "key".  Returns OK on
   // success, and a non-OK status on error.  It is not an error if "key"
@@ -95,6 +95,8 @@ class LEVELDB_EXPORT DB {
                      std::string* value) = 0;
   virtual Status PreGet(const ReadOptions& options, const Slice& key,
                         std::string* value) = 0;
+
+  virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value) = 0;
   
   virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
                     uint64_t length_range, std::vector<std::string>& res) {};

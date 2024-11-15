@@ -106,14 +106,6 @@ void EncodeRow(const vector<string>& row, string* key, string* value) {
     key->append(fill_key(row[l_orderkey], 8));
     key->append(fill_key(row[l_linenumber], 8));
 
-    // uint64_t orderkey = 0, linenumber = 0;
-    // orderkey = std::stoull(row[l_orderkey].c_str(), nullptr, 10);
-    // linenumber = std::stoull(row[l_linenumber].c_str(), nullptr, 10);
-    // PutFixed64(key, orderkey);
-    // PutFixed64(key, linenumber);
-    // cout << "row[l_orderkey]: " << row[l_orderkey] << ", row[l_linenumber]: " << row[l_linenumber] << endl;
-    // cout << "orderkey: " << orderkey << ", linenumer: " << linenumber << endl;
-
     // Encode values
 
     // [shipdate, quantity, l_receiptdate]作为前三个属性
@@ -144,7 +136,7 @@ void EncodeRow(const vector<string>& row, string* key, string* value) {
 
     double discount = 0;
     discount = std::atof(row[l_discount].c_str());
-    PutFixed64(value, discount);
+    PutFixed64(value, discount * 100);
 
     double tax = 0;
     tax = std::atof(row[l_tax].c_str());
@@ -175,6 +167,7 @@ void EncodeRow(const vector<string>& row, string* key, string* value) {
 constexpr size_t shipdate_offset = 0;
 constexpr size_t quantity_offset = 4;
 constexpr size_t discount_offset = 36;
+constexpr size_t receiptdate_offset = 8;
 
 
 // build secondary index
@@ -182,8 +175,8 @@ constexpr size_t discount_offset = 36;
 void encodeSecondaryKey(const vector<string>& row, string* secondary_key) {
     // encode index
     std::string index_key = fill_value("index", 8);
-    PutLengthPrefixedSlice(secondary_key, index_key);
-
+    secondary_key->append(index_key, 8);
+    // PutLengthPrefixedSlice(secondary_key, index_key);
 
     uint32_t shipdate = 0;
     shipdate = uniformDate(row[l_shipdate].c_str());
@@ -225,7 +218,6 @@ int main(int argc, char *argv[]) {
 
     int query_type;
     bool predefined_range;
-    bool use_secondary_index;
 
     cxxopts::Options commandline_options("leveldb tpch test", "Testing leveldb based on tpch lineitem.");
     commandline_options.add_options()
@@ -241,7 +233,7 @@ int main(int argc, char *argv[]) {
             ("dummy", "dummy option")
             ("t, query_type", "the query type of tpch", cxxopts::value<int>(query_type)->default_value("6"))
             ("predefined_range", "use predefined range", cxxopts::value<bool>(predefined_range)->default_value("false"))
-            ("si", "use secondary index", cxxopts::value<bool>(use_secondary_index)->default_value("false"))
+            ("si", "use secondary index", cxxopts::value<bool>(adgMod::use_secondary_index)->default_value("false"))
             ("filter", "use filter", cxxopts::value<bool>(adgMod::use_filter)->default_value("false"))
             ("start1", "start for attribute 1", cxxopts::value<uint32_t>(start1)->default_value("1"))
             ("end1", "end for attribute 1", cxxopts::value<uint32_t>(end1)->default_value("10"))
@@ -303,23 +295,19 @@ int main(int argc, char *argv[]) {
             // cout << "key: " << key.size() << ", value: " << value.size() << endl; 
 
             instance->StartTimer(9);
-            if(adgMod::MOD <= 10) {
-                status = db->Put(write_options, key, value);
-                // if use secondary index
-                if(use_secondary_index) {
-                    string secondary_key;
-                    encodeSecondaryKey(row, &secondary_key);
-                    status = db->Put(write_options, secondary_key, key);
 
-                    // std::cout << "secondary key size: " << secondary_key.size() << std::endl;
-                    // std::cout << "secondary index key: " << secondary_key << ", primary key: " << key << std::endl;
-                }
+            if(!adgMod::use_secondary_index) {
+                // no secondary index
+                status = db->Put(write_options, key, value);
             } else {
-                // status = db->sPut(write_options, key, , value);
+                // if use secondary index
+                string secondary_key;
+                encodeSecondaryKey(row, &secondary_key);
+                // std::cout << "secondary key size: " << secondary_key.size() << std::endl;
+                // std::cout << "secondary index key: " << secondary_key << ", primary key: " << key << std::endl;
+                status = db->sPut(write_options, key, Slice{secondary_key.data(), secondary_key.size()}, value);
             }
             
-
-
             assert(status.ok() && "File Put Error");
             instance->PauseTimer(9, true);
 
@@ -358,7 +346,7 @@ int main(int argc, char *argv[]) {
         
             if (adgMod::MOD == 8) {
                 // Wisckey
-                if(use_secondary_index) {
+                if(adgMod::use_secondary_index) {
                     
                 } else {
                     // 没有secondary index，需要全表扫描
@@ -413,7 +401,97 @@ int main(int argc, char *argv[]) {
                     ++res_count;
                 }
                 instance->PauseTimer(17);
-            } else {
+            } 
+            else if (adgMod::MOD == 12) {
+                // RISE
+
+                // calculate range
+                uint32_t shipdate_start, shipdate_end;
+                double discount_start, discount_end;
+                uint32_t quantity_start, quantity_end;
+                if(!predefined_range) {
+                    // if no predefined range, use typical tpch query range
+                    shipdate_start  = uniformDate("1993-01-01");
+                    shipdate_end    = uniformDate("1994-01-01");
+                    
+                    discount_start  = 0.03 * 100;
+                    discount_end    = 0.05 * 100;
+
+                    quantity_start  = 0;
+                    quantity_end    = 24;
+                }
+                std::cout << "shipdate_start: " << shipdate_start << ", shipdate_end: " << shipdate_end << std::endl;
+                std::cout << "discount_start: " << discount_start << ", discount_end: " << discount_end << std::endl;
+                std::cout << "quantity_start: " << quantity_start << ", quantity_end: " << quantity_end << std::endl;
+
+                if(adgMod::use_secondary_index) {
+                    string secondary_start, secondary_end;
+                    /*
+                        calculate the secondary start and secondary end based on shipdate, discount, and quantity
+                    */
+                    {
+                        std::vector<string> start_row;
+                        start_row.resize(20);
+                        start_row[l_shipdate] = "1993-01-01";
+                        start_row[l_quantity] = "0";
+                        start_row[l_receiptdate] = "1992-01-01";
+                        start_row[l_orderkey] = "0";
+                        start_row[l_linenumber] = "0";
+                        encodeSecondaryKey(start_row, &secondary_start);
+
+                        std::vector<string> end_row;
+                        end_row.resize(20);
+                        end_row[l_shipdate] = "1994-01-01";
+                        end_row[l_quantity] = "23";
+                        end_row[l_receiptdate] = "1998-01-01";
+                        end_row[l_orderkey] = "99999999";
+                        end_row[l_linenumber] = "99999999";
+                        encodeSecondaryKey(end_row, &secondary_end);
+                    }
+                    
+                    std::cout << "secondary start size: " << secondary_start.size() << ", secondary end size: " << secondary_end.size() << std::endl;
+                    std::cout << "secondary start: " << secondary_start << ", secondary_end: " << secondary_end << std::endl;
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice value_address = db_iter->value();
+
+                        uint32_t group_index = DecodeFixed32(value_address.data());
+                        uint64_t vaddress = DecodeFixed64(value_address.data() + sizeof(uint32_t));
+                        uint32_t vsize = DecodeFixed32(value_address.data() + sizeof(uint32_t) + sizeof(uint64_t));
+
+                        string value;
+                        
+                        db->GroupVGet(group_index, vaddress, vsize, &value);
+
+                        // if find the value
+                        uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+                        uint64_t discount = DecodeFixed64(value.data() + discount_offset);
+                        uint32_t quantity = DecodeFixed32(value.data() + quantity_offset);
+
+                        std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                        if(shipdate >= shipdate_start && shipdate < shipdate_end  && quantity < quantity_end && discount > discount_start && discount < discount_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                } else {
+                    // no secondary index
+                }
+            } else{
                 // LevelDB
 
                 uint32_t shipdate_start, shipdate_end;
@@ -424,8 +502,8 @@ int main(int argc, char *argv[]) {
                     shipdate_start  = uniformDate("1993-01-01");
                     shipdate_end    = uniformDate("1994-01-01");
                     
-                    discount_start  = 0.03;
-                    discount_end    = 0.05;
+                    discount_start  = 0.03 * 100;
+                    discount_end    = 0.05 * 100;
 
                     quantity_start  = 0;
                     quantity_end    = 24;
@@ -434,7 +512,7 @@ int main(int argc, char *argv[]) {
                 std::cout << "discount_start: " << discount_start << ", discount_end: " << discount_end << std::endl;
                 std::cout << "quantity_start: " << quantity_start << ", quantity_end: " << quantity_end << std::endl;
                 
-                if(use_secondary_index) {
+                if(adgMod::use_secondary_index) {
                     // use secondary_index to find the primary key first
 
                     string secondary_start, secondary_end;
@@ -477,7 +555,7 @@ int main(int argc, char *argv[]) {
                     }
 
                     instance->StartTimer(17);
-                    for (; db_iter->Valid(); db_iter->Next()) {
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
                         Slice secondary_key = db_iter->key();
                         Slice primary_key = db_iter->value();
 
@@ -515,11 +593,610 @@ int main(int argc, char *argv[]) {
                         Slice value = db_iter->value();
 
                         uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
-                        double discount = DecodeFixed64(value.data() + discount_offset);
+                        uint64_t discount = DecodeFixed64(value.data() + discount_offset);
                         uint32_t quantity = DecodeFixed32(value.data() + quantity_offset);
 
                         // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
-                        if(shipdate >= shipdate_start && shipdate < shipdate_end  && quantity < quantity_end) {
+                        if(shipdate >= shipdate_start && shipdate < shipdate_end  && quantity < quantity_end && discount > discount_start && discount < discount_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                }
+            }
+            instance->PauseTimer(13, true);
+            cout << "Num of entries within range: " << res_count << endl;
+            delete db_iter;
+        } else if (query_type == 12) {
+            cout << "Begin Test TPC-H Q12!\n";
+            status = DB::Open(options, db_location, &db);
+            assert(status.ok() && "Open Error");
+            adgMod::db->WaitForBackground();
+
+            Iterator* db_iter;
+            uint64_t res_count = 0;
+            instance->StartTimer(13);
+
+
+            // calculate range
+            string l_shipmode = "SHIPMODE1";
+            uint32_t receiptdate_start = uniformDate("1993-01-01");
+            uint32_t receiptdate_end = uniformDate("1994-01-01");
+            std::cout << "l_shipmode: " << l_shipmode << std::endl;
+            std::cout << "receiptdate_start: " << receiptdate_start << std::endl;
+            std::cout << "receiptdate_end: " << receiptdate_end << std::endl;
+
+            string secondary_start, secondary_end; 
+            /*
+                calculate the secondary start and secondary end based on shipdate, discount, and quantity
+            */
+            {
+                std::vector<string> start_row;
+                start_row.resize(20);
+                start_row[l_shipdate] = "0";
+                start_row[l_quantity] = "0";
+                start_row[l_receiptdate] = "1993-01-01";
+                start_row[l_orderkey] = "0";
+                start_row[l_linenumber] = "0";
+                encodeSecondaryKey(start_row, &secondary_start);
+
+                std::vector<string> end_row;
+                end_row.resize(20);
+                end_row[l_shipdate] = "1998-01-01";
+                end_row[l_quantity] = "23";
+                end_row[l_receiptdate] = "1994-01-01";
+                end_row[l_orderkey] = "99999999";
+                end_row[l_linenumber] = "99999999";
+                encodeSecondaryKey(end_row, &secondary_end);
+            }
+            
+            std::cout << "secondary start size: " << secondary_start.size() << ", secondary end size: " << secondary_end.size() << std::endl;
+            std::cout << "secondary start: " << secondary_start << ", secondary_end: " << secondary_end << std::endl;
+
+
+            if (adgMod::MOD == 12) {
+                // RISE
+                if(adgMod::use_secondary_index) {
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice value_address = db_iter->value();
+
+                        uint32_t group_index = DecodeFixed32(value_address.data());
+                        uint64_t vaddress = DecodeFixed64(value_address.data() + sizeof(uint32_t));
+                        uint32_t vsize = DecodeFixed32(value_address.data() + sizeof(uint32_t) + sizeof(uint64_t));
+
+                        string value;
+                        
+                        db->GroupVGet(group_index, vaddress, vsize, &value);
+
+                        // if find the value
+                        uint32_t receiptdate = DecodeFixed32(value.data() + receiptdate_offset);
+
+                        if(receiptdate >= receiptdate_start && receiptdate < receiptdate_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                } else {
+                    // no secondary index
+                }
+            } else{
+                // LevelDB
+                
+                if(adgMod::use_secondary_index) {
+                    
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice primary_key = db_iter->value();
+
+
+                        string value;
+                        Status s = db->Get(ReadOptions(), primary_key, &value);
+
+                        // if find the value
+                        if(s.ok()) {
+                            uint32_t receiptdate = DecodeFixed32(value.data() + receiptdate_offset);
+
+                            if(receiptdate >= receiptdate_start && receiptdate < receiptdate_end) {
+                                ++res_count;
+                            }
+                        }
+
+                    }
+                    instance->PauseTimer(17);
+
+                }else {
+                    // no secondary index, need full table scan
+
+                    db_iter = db->NewIterator(read_options);
+                    instance->StartTimer(4);
+                    db_iter->SeekToFirst();
+                    instance->PauseTimer(4);
+                    
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid(); db_iter->Next()) {
+                        Slice key = db_iter->key();
+                        Slice value = db_iter->value();
+
+                        uint32_t receiptdate = DecodeFixed32(value.data() + receiptdate_offset);
+                        
+                        if(receiptdate >= receiptdate_start && receiptdate < receiptdate_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                }
+            }
+            instance->PauseTimer(13, true);
+            cout << "Num of entries within range: " << res_count << endl;
+            delete db_iter;
+        } else if (query_type == 14) {
+            cout << "Begin Test TPC-H Q14!\n";
+            status = DB::Open(options, db_location, &db);
+            assert(status.ok() && "Open Error");
+            adgMod::db->WaitForBackground();
+
+            Iterator* db_iter;
+            uint64_t res_count = 0;
+            instance->StartTimer(13);
+
+            // calculate range
+            uint32_t shipdate_start = uniformDate("1994-01-01");
+            uint32_t shipdate_end = uniformDate("1994-02-01");
+            std::cout << "shipdate_start: " << shipdate_start << std::endl;
+            std::cout << "shipdate_end: " << shipdate_end << std::endl;
+
+            string secondary_start, secondary_end; 
+            /*
+                calculate the secondary start and secondary end based on shipdate, discount, and quantity
+            */
+            {
+                std::vector<string> start_row;
+                start_row.resize(20);
+                start_row[l_shipdate] = "1994-01-01";
+                start_row[l_quantity] = "0";
+                start_row[l_receiptdate] = "1993-01-01";
+                start_row[l_orderkey] = "0";
+                start_row[l_linenumber] = "0";
+                encodeSecondaryKey(start_row, &secondary_start);
+
+                std::vector<string> end_row;
+                end_row.resize(20);
+                end_row[l_shipdate] = "1994-02-01";
+                end_row[l_quantity] = "23";
+                end_row[l_receiptdate] = "1997-01-01";
+                end_row[l_orderkey] = "99999999";
+                end_row[l_linenumber] = "99999999";
+                encodeSecondaryKey(end_row, &secondary_end);
+            }
+            
+            std::cout << "secondary start size: " << secondary_start.size() << ", secondary end size: " << secondary_end.size() << std::endl;
+            std::cout << "secondary start: " << secondary_start << ", secondary_end: " << secondary_end << std::endl;
+
+            if (adgMod::MOD == 12) {
+                // RISE
+
+                if(adgMod::use_secondary_index) {
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice value_address = db_iter->value();
+
+                        uint32_t group_index = DecodeFixed32(value_address.data());
+                        uint64_t vaddress = DecodeFixed64(value_address.data() + sizeof(uint32_t));
+                        uint32_t vsize = DecodeFixed32(value_address.data() + sizeof(uint32_t) + sizeof(uint64_t));
+
+                        string value;
+                        
+                        db->GroupVGet(group_index, vaddress, vsize, &value);
+
+                        // if find the value
+                        uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+
+                        std::cout << "shipdate: " << shipdate << std::endl;
+                        if(shipdate >= shipdate_start && shipdate < shipdate_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                } else {
+                    // no secondary index
+                }
+            } else{
+                // LevelDB
+                if(adgMod::use_secondary_index) {
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice primary_key = db_iter->value();
+
+
+                        string value;
+                        Status s = db->Get(ReadOptions(), primary_key, &value);
+
+                        // if find the value
+                        if(s.ok()) {
+                            uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+
+                            // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                            if(shipdate >= shipdate_start && shipdate < shipdate_end) {
+                                ++res_count;
+                            }
+                        }
+
+                    }
+                    instance->PauseTimer(17);
+
+
+                }else {
+                    // no secondary index, need full table scan
+
+                    db_iter = db->NewIterator(read_options);
+                    instance->StartTimer(4);
+                    db_iter->SeekToFirst();
+                    instance->PauseTimer(4);
+                    
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid(); db_iter->Next()) {
+                        Slice key = db_iter->key();
+                        Slice value = db_iter->value();
+
+                        uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+
+                        // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                        if(shipdate >= shipdate_start && shipdate < shipdate_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                }
+            }
+            instance->PauseTimer(13, true);
+            cout << "Num of entries within range: " << res_count << endl;
+            delete db_iter;
+
+        } else if (query_type == 19) {
+            cout << "Begin Test TPC-H Q19!\n";
+            status = DB::Open(options, db_location, &db);
+            assert(status.ok() && "Open Error");
+            adgMod::db->WaitForBackground();
+
+            Iterator* db_iter;
+            uint64_t res_count = 0;
+            instance->StartTimer(13);
+
+            // calculate range
+            uint32_t quantity_start = 10;
+            uint32_t quantity_end = 20;
+            std::cout << "quantity_start: " << quantity_start << std::endl;
+            std::cout << "quantity_end: " << quantity_end << std::endl;
+
+            string secondary_start, secondary_end; 
+            /*
+                calculate the secondary start and secondary end based on shipdate, discount, and quantity
+            */
+            {
+                std::vector<string> start_row;
+                start_row.resize(20);
+                start_row[l_shipdate] = "1993-01-01";
+                start_row[l_quantity] = "10";
+                start_row[l_receiptdate] = "1993-01-01";
+                start_row[l_orderkey] = "0";
+                start_row[l_linenumber] = "0";
+                encodeSecondaryKey(start_row, &secondary_start);
+
+                std::vector<string> end_row;
+                end_row.resize(20);
+                end_row[l_shipdate] = "1997-01-01";
+                end_row[l_quantity] = "20";
+                end_row[l_receiptdate] = "1997-01-01";
+                end_row[l_orderkey] = "99999999";
+                end_row[l_linenumber] = "99999999";
+                encodeSecondaryKey(end_row, &secondary_end);
+            }
+            
+            std::cout << "secondary start size: " << secondary_start.size() << ", secondary end size: " << secondary_end.size() << std::endl;
+            std::cout << "secondary start: " << secondary_start << ", secondary_end: " << secondary_end << std::endl;
+            
+            if (adgMod::MOD == 12) {
+                // RISE
+
+                if(adgMod::use_secondary_index) {
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice value_address = db_iter->value();
+
+                        uint32_t group_index = DecodeFixed32(value_address.data());
+                        uint64_t vaddress = DecodeFixed64(value_address.data() + sizeof(uint32_t));
+                        uint32_t vsize = DecodeFixed32(value_address.data() + sizeof(uint32_t) + sizeof(uint64_t));
+
+                        string value;
+                        
+                        db->GroupVGet(group_index, vaddress, vsize, &value);
+
+                        // if find the value
+                        uint32_t quantity = DecodeFixed32(value.data() + quantity_offset);
+
+                        std::cout << "quantity: " << quantity << std::endl;
+                        if(quantity >= quantity_start && quantity < quantity_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                } else {
+                    // no secondary index
+                }
+            } else{
+                // LevelDB
+                if(adgMod::use_secondary_index) {
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice primary_key = db_iter->value();
+
+
+                        string value;
+                        Status s = db->Get(ReadOptions(), primary_key, &value);
+
+                        // if find the value
+                        if(s.ok()) {
+                            uint32_t quantity = DecodeFixed32(value.data() + quantity_offset);
+
+                            // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                            if(quantity >= quantity_start && quantity < quantity_end) {
+                                ++res_count;
+                            }
+                        }
+                    }
+                    instance->PauseTimer(17);
+
+
+                }else {
+                    // no secondary index, need full table scan
+
+                    db_iter = db->NewIterator(read_options);
+                    instance->StartTimer(4);
+                    db_iter->SeekToFirst();
+                    instance->PauseTimer(4);
+                    
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid(); db_iter->Next()) {
+                        Slice key = db_iter->key();
+                        Slice value = db_iter->value();
+
+                        uint32_t quantity = DecodeFixed32(value.data() + quantity_offset);
+
+                        // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                        if(quantity >= quantity_start && quantity < quantity_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                }
+            }
+            instance->PauseTimer(13, true);
+            cout << "Num of entries within range: " << res_count << endl;
+            delete db_iter;
+
+
+        } else if (query_type == 20) {
+            cout << "Begin Test TPC-H Q20!\n";
+            status = DB::Open(options, db_location, &db);
+            assert(status.ok() && "Open Error");
+            adgMod::db->WaitForBackground();
+
+            Iterator* db_iter;
+            uint64_t res_count = 0;
+            instance->StartTimer(13);
+
+            // calculate range
+            uint32_t shipdate_start = uniformDate("1993-01-01");
+            uint32_t shipdate_end = uniformDate("1994-01-01");
+            std::cout << "shipdate_start: " << shipdate_start << std::endl;
+            std::cout << "shipdate_end: " << shipdate_end << std::endl;
+
+            string secondary_start, secondary_end; 
+            /*
+                calculate the secondary start and secondary end based on shipdate, discount, and quantity
+            */
+            {
+                std::vector<string> start_row;
+                start_row.resize(20);
+                start_row[l_shipdate] = "1993-01-01";
+                start_row[l_quantity] = "0";
+                start_row[l_receiptdate] = "1993-01-01";
+                start_row[l_orderkey] = "0";
+                start_row[l_linenumber] = "0";
+                encodeSecondaryKey(start_row, &secondary_start);
+
+                std::vector<string> end_row;
+                end_row.resize(20);
+                end_row[l_shipdate] = "1994-01-01";
+                end_row[l_quantity] = "20";
+                end_row[l_receiptdate] = "1997-01-01";
+                end_row[l_orderkey] = "99999999";
+                end_row[l_linenumber] = "99999999";
+                encodeSecondaryKey(end_row, &secondary_end);
+            }
+            
+            std::cout << "secondary start size: " << secondary_start.size() << ", secondary end size: " << secondary_end.size() << std::endl;
+            std::cout << "secondary start: " << secondary_start << ", secondary_end: " << secondary_end << std::endl;
+
+            if (adgMod::MOD == 12) {
+                // RISE
+                if(adgMod::use_secondary_index) {
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice value_address = db_iter->value();
+
+                        uint32_t group_index = DecodeFixed32(value_address.data());
+                        uint64_t vaddress = DecodeFixed64(value_address.data() + sizeof(uint32_t));
+                        uint32_t vsize = DecodeFixed32(value_address.data() + sizeof(uint32_t) + sizeof(uint64_t));
+
+                        string value;
+                        
+                        db->GroupVGet(group_index, vaddress, vsize, &value);
+
+                        // if find the value
+                        uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+
+                        std::cout << "shipdate: " << shipdate << std::endl;
+                        if(shipdate >= shipdate_start && shipdate < shipdate_end) {
+                            ++res_count;
+                        }
+                    }
+                    instance->PauseTimer(17);
+                } else {
+                    // no secondary index
+                }
+            } else{
+                // LevelDB
+                if(adgMod::use_secondary_index) {
+
+                    db_iter = db->NewIterator(read_options);
+
+                    instance->StartTimer(4);
+                    db_iter->Seek(secondary_start);
+                    instance->PauseTimer(4);
+
+                    if (db_iter->Valid()) {
+                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
+                    } else {
+                        std::cout << "No valid key found after Seek." << std::endl;
+                    }
+
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid() && db_iter->key() <= secondary_end; db_iter->Next()) {
+                        Slice secondary_key = db_iter->key();
+                        Slice primary_key = db_iter->value();
+
+
+                        string value;
+                        Status s = db->Get(ReadOptions(), primary_key, &value);
+
+                        // if find the value
+                        if(s.ok()) {
+                            uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+
+                            // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                            if(shipdate >= shipdate_start && shipdate < shipdate_end) {
+                                ++res_count;
+                            }
+                        }
+                    }
+                    instance->PauseTimer(17);
+
+
+                }else {
+                    // no secondary index, need full table scan
+
+                    db_iter = db->NewIterator(read_options);
+                    instance->StartTimer(4);
+                    db_iter->SeekToFirst();
+                    instance->PauseTimer(4);
+                    
+                    instance->StartTimer(17);
+                    for (; db_iter->Valid(); db_iter->Next()) {
+                        Slice key = db_iter->key();
+                        Slice value = db_iter->value();
+
+                        uint32_t shipdate = DecodeFixed32(value.data() + shipdate_offset);
+
+                        // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
+                        if(shipdate >= shipdate_start && shipdate < shipdate_end) {
                             ++res_count;
                         }
                     }
@@ -530,6 +1207,8 @@ int main(int argc, char *argv[]) {
             cout << "Num of entries within range: " << res_count << endl;
             delete db_iter;
         }
+
+        
     
         /*
             report running message

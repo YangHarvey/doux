@@ -8,6 +8,8 @@ using std::to_string;
 namespace adgMod {
 
     int MOD = 0;
+    bool use_secondary_index = false;
+
     bool string_mode = true;
     uint64_t key_multiple = 1;
     uint32_t model_error = 10;

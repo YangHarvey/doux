@@ -185,7 +185,7 @@ sleep 10
 sleep 10
 ./ycsb_bench -k 16 -v 1024 -c -w 8 -e 10082 -n 10082 -d ${rise_dir} -m 12 -t 3 > ${rise_output}/ycsb_e.txt
 
-YCSB-F
+# YCSB-F
 ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${rise_dir} -m 12 -t 3 > ${rise_output}/ycsb_f_init.txt
 sleep 10
 ./ycsb_bench -k 16 -v 1024 -c -w 9 -e 10082 -n 10082 -d ${rise_dir} -m 12 -t 3 > ${rise_output}/ycsb_f.txt

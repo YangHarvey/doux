@@ -2028,6 +2028,10 @@ class ModelDB : public DB {
   virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v) {
     return DB::Put(o, k, v);
   }
+  virtual Status sPut(const WriteOptions& o, const Slice& k, const Slice& sk, const std::string& v) {
+    assert(false);
+    return Status::NotFound(k);
+  }
   virtual Status Delete(const WriteOptions& o, const Slice& key) {
     return DB::Delete(o, key);
   }
@@ -2040,6 +2044,10 @@ class ModelDB : public DB {
                         std::string* value) {
     assert(false);  // Not implemented
     return Status::NotFound(key);
+  }
+  virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value) {
+    assert(false);  // Not implemented
+    return ;
   }
   virtual Iterator* NewIterator(const ReadOptions& options) {
     if (options.snapshot == nullptr) {

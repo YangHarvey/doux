@@ -37,6 +37,7 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "mod/stats.h"
+#include "mod/util.h"
 #include "mod/Vlog.h"
 #include <x86intrin.h>
 
@@ -987,7 +988,7 @@ void DBImpl::RunCoLocationGC() {
     for(int i = 0; i < grouped_vlog->num_groups / 10; i++) {
       // random一个group num
       int group_index = rand() % grouped_vlog->num_groups;
-      std::cout << "group index: " << group_index << std::endl;
+      // std::cout << "group index: " << group_index << std::endl;
     // for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
       // read all data from group
       std::vector<std::pair<leveldb::Slice, leveldb::Slice>> valid_records;
@@ -995,8 +996,6 @@ void DBImpl::RunCoLocationGC() {
       uint64_t offset = 0;
 
       leveldb::Slice key, value;
-
-  
 
       while (offset < group_log_size) {
         uint32_t key_size;
@@ -1030,9 +1029,15 @@ void DBImpl::RunCoLocationGC() {
 
       grouped_vlog->group_vlogs[group_index]->Reset();
 
-      std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
-        return a.first.ToString() < b.first.ToString();  // Sort by the key (or you can use another sorting criterion)
-      });
+      if(adgMod::use_secondary_index) {
+        std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
+          return a.second.ToString() < b.second.ToString();  // Sort by the value (or you can use another sorting criterion)
+        });
+      } else {
+        std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
+          return a.first.ToString() < b.first.ToString();  // Sort by the key (or you can use another sorting criterion)
+        });
+      }
 
       for (const auto& record : valid_records) {
         auto vaddr = grouped_vlog->AddRecord(record.first, record.second);
@@ -1048,6 +1053,16 @@ void DBImpl::RunCoLocationGC() {
         // Step 7: Update the LSM-tree with the new addresses
         WriteOptions o;
         DB::Put(o, record.first, leveldb::Slice(buffer, sizeof(buffer)));
+
+        if(adgMod::use_secondary_index) {
+          std::string secondary_key;
+
+          std::string index_key = adgMod::fill_value("index", 8);
+          secondary_key.append(index_key, 8);
+          secondary_key.append(std::string(record.second.data(), 12));
+          secondary_key.append(std::string(record.first.data(), 16));
+          DB::Put(o, secondary_key, leveldb::Slice(buffer, sizeof(buffer)));
+        }
     }
 
 
@@ -2043,6 +2058,10 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   return s;
 }
 
+void DBImpl::GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value) {
+  *value = std::move(grouped_vlog->group_vlogs[group_index]->ReadRecord(vaddr, size));
+}
+
 Status DBImpl::PreGet(const ReadOptions& options, const Slice& key,
                       std::string* value) {
   adgMod::Stats* instance = adgMod::Stats::GetInstance();
@@ -2235,13 +2254,16 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
     
     // co-location GC
     static int write_count = 0;  // Static counter to keep track of writes
-    const int GC_THRESHOLD = 10000;  // Threshold for triggering GC
+    const int GC_THRESHOLD = 100000;  // Threshold for triggering GC
 
-    string value;
-    ReadOptions read_options;
-    auto s = PreGet(read_options, key, &value);
-    if(s.ok()) {
-      // delete the old value in decoupled secondary index
+    // 有secondary index
+    if(adgMod::use_secondary_index) {
+      string value;
+      ReadOptions read_options;
+      auto s = PreGet(read_options, key, &value);
+      if(s.ok()) {
+        // delete the old value in decoupled secondary index
+      }
     }
 
     write_count++;
@@ -2273,30 +2295,78 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
 }
 
 Status DBImpl::sPut(const WriteOptions& o, const Slice& key, const Slice &skey, const std::string& value) {
-  if(adgMod::MOD != 11) {
-    Put(o, key, value);
-  }
-  uint64_t value_address = adgMod::db->vlog->AddRecord(key, value);
+  if(adgMod::MOD == 0) {
+    // leveldb
+    Status status =  DB::Put(o, key, value);
+    if(!status.ok()) {
+      return status;
+    }
+    return DB::Put(o, skey, key);
+  } else if(adgMod::MOD == 12) {
+    // RISE
+    std::lock_guard<std::mutex> lock(gc_mutex); 
 
-  /*
-    primary index
-  */
-  char buffer[sizeof(uint64_t) + sizeof(uint32_t)];
-  EncodeFixed64(buffer, value_address);
-  EncodeFixed32(buffer + sizeof(uint64_t), value.size());
-  Status status1 = DB::Put(o, key, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
-  /*
-    secondary index
-  */
-  size_t total_size = adgMod::sidx_perfix.size() + skey.size() + key.size();
-  char *skey_buffer = new char[total_size];
-  memcpy(skey_buffer, adgMod::sidx_perfix.data(), adgMod::sidx_perfix.size());
-  memcpy(skey_buffer + adgMod::sidx_perfix.size(), skey.data(), skey.size());
-  memcpy(skey_buffer + adgMod::sidx_perfix.size() + skey.size(), key.data(), key.size());
-  Status status2 = DB::Put(o, (Slice) {skey_buffer, total_size}, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
-  delete skey_buffer;
+    // co-location GC
+    static int write_count = 0;  // Static counter to keep track of writes
+    const int GC_THRESHOLD = 100000;  // Threshold for triggering GC
+
+    // 有secondary index
+    if(adgMod::use_secondary_index) {
+      string value;
+      ReadOptions read_options;
+      auto s = PreGet(read_options, key, &value);
+      if(s.ok()) {
+        // delete the old value in decoupled secondary index
+        DB::Delete(o, skey);
+      }
+    }
+
+    write_count++;
+    if (write_count >= GC_THRESHOLD) {
+        RunCoLocationGC();
+        write_count = 0;  // Reset the counter after GC
+    }
+
+    auto vaddr = grouped_vlog->AddRecord(key, value);
+    char buffer[sizeof(int) + sizeof(uint64_t) + sizeof(uint32_t)];
+    EncodeFixed32(buffer, vaddr.first);
+    EncodeFixed64(buffer + sizeof(int), vaddr.second);
+    EncodeFixed32(buffer + sizeof(int) + sizeof(uint64_t), value.size());
+
+    Status status = DB::Put(o, key, (Slice) {buffer, sizeof(buffer)});
+    if(!status.ok()) {
+      return status;
+    }
+    return DB::Put(o, skey, (Slice) {buffer, sizeof(buffer)});
+  } else if (adgMod::MOD == 11) {
+    // SineKV
+  }
+  return DB::Put(o, key, value);
+
+  // if(adgMod::MOD != 11) {
+  //   Put(o, key, value);
+  // }
+  // uint64_t value_address = adgMod::db->vlog->AddRecord(key, value);
+
+  // /*
+  //   primary index
+  // */
+  // char buffer[sizeof(uint64_t) + sizeof(uint32_t)];
+  // EncodeFixed64(buffer, value_address);
+  // EncodeFixed32(buffer + sizeof(uint64_t), value.size());
+  // Status status1 = DB::Put(o, key, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
+  // /*
+  //   secondary index
+  // */
+  // size_t total_size = adgMod::sidx_perfix.size() + skey.size() + key.size();
+  // char *skey_buffer = new char[total_size];
+  // memcpy(skey_buffer, adgMod::sidx_perfix.data(), adgMod::sidx_perfix.size());
+  // memcpy(skey_buffer + adgMod::sidx_perfix.size(), skey.data(), skey.size());
+  // memcpy(skey_buffer + adgMod::sidx_perfix.size() + skey.size(), key.data(), key.size());
+  // Status status2 = DB::Put(o, (Slice) {skey_buffer, total_size}, (Slice) {buffer, sizeof(uint64_t) + sizeof(uint32_t)});
+  // delete skey_buffer;
   
-  return status2;
+  // return status2;
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
