@@ -168,7 +168,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
         cold_vlog = new adgMod::VLog(dbname_ + "/cold_vlog.txt");
 
         // RISE: grouped value log
-        grouped_vlog = new adgMod::GroupValueLog(dbname_ + "/grouped_vlog.txt");
+        grouped_vlog = new adgMod::GroupValueLog(dbname_ + "/grouped_vlog.txt", 200);
       }
 
 DBImpl::~DBImpl() {
@@ -983,11 +983,93 @@ void DBImpl::ReclaimVLog() {
   // std::cout << "Reclaim vlog: " << reclaimNum << " entries" << std::endl;
 }
 
-void DBImpl::RunCoLocationGC() {
+void DBImpl::runAllColocationGC() {
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+  for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
+      // std::cout << "group index: " << group_index << std::endl;
+     // for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
+      // read all data from group
+      std::vector<std::pair<leveldb::Slice, leveldb::Slice>> valid_records;
+      uint64_t group_log_size = grouped_vlog->group_vlogs[group_index]->getVlogsize();
+      uint64_t offset = 0;
 
+      leveldb::Slice key, value;
+
+      while (offset < group_log_size) {
+        uint32_t key_size;
+        uint32_t value_size;
+
+        // Read the key size and value size
+        auto key_size_slice = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, sizeof(uint32_t));
+        key_size = DecodeFixed32(key_size_slice.data());
+        offset += sizeof(uint32_t);
+
+        // Read the key
+        key = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, key_size);
+        offset += key_size;
+
+        // Read the value size
+        auto value_size_slice = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, sizeof(uint32_t));
+        value_size = DecodeFixed32(value_size_slice.data());
+        offset += sizeof(uint32_t);
+
+        // Read the value
+        value = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, value_size);
+        offset += value_size;
+
+        // std::cout << "key size: " << key_size << ", value size: " << value_size << std::endl;
+        // Step 3: Validate the record
+        if (true) {
+            // Add valid records to the list
+            valid_records.emplace_back(key, value);
+        }
+      }
+  
+
+      // grouped_vlog->group_vlogs[group_index]->Reset();
+
+      if(adgMod::use_secondary_index) {
+        std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
+          return a.second.ToString() < b.second.ToString();  // Sort by the value (or you can use another sorting criterion)
+        });
+      } else {
+        std::sort(valid_records.begin(), valid_records.end(), [](const std::pair<leveldb::Slice, leveldb::Slice>& a, const std::pair<leveldb::Slice, leveldb::Slice>& b) {
+          return a.first.ToString() < b.first.ToString();  // Sort by the key (or you can use another sorting criterion)
+        });
+      }
+
+      for (const auto& record : valid_records) {
+        auto vaddr = grouped_vlog->AddRecord(record.first, record.second);
+        
+        char buffer[sizeof(int) + sizeof(uint64_t) + sizeof(uint32_t)];
+        EncodeFixed32(buffer, vaddr.first);       // Group index
+        EncodeFixed64(buffer + sizeof(int), vaddr.second);  // Address
+        EncodeFixed32(buffer + sizeof(int) + sizeof(uint64_t), record.second.size()); // Value size
+
+        // Optionally print the progress (for debugging)
+        // std::cout << "Put: < " <<  vaddr.first << ", " << vaddr.second << ", " << record.second.size() << ">" << std::endl;
+
+        // Step 7: Update the LSM-tree with the new addresses
+        WriteOptions o;
+        DB::Put(o, record.first, leveldb::Slice(buffer, sizeof(buffer)));
+
+        if(adgMod::use_secondary_index) {
+          std::string secondary_key;
+
+          secondary_key.append(adgMod::fill_value("index", 8));
+          secondary_key.append(std::string(record.second.data(), 12));
+          secondary_key.append(std::string(record.first.data(), 24));
+          DB::Put(o, secondary_key, leveldb::Slice(buffer, sizeof(buffer)));
+        }
+    }
+  }
+}
+
+void DBImpl::RunCoLocationGC() {
+    std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
     for(int i = 0; i < grouped_vlog->num_groups / 10; i++) {
       // random一个group num
-      int group_index = rand() % grouped_vlog->num_groups;
+      uint32_t group_index = rand() % grouped_vlog->num_groups;
       // std::cout << "group index: " << group_index << std::endl;
     // for(int group_index = 0; group_index < grouped_vlog->num_groups; group_index++) {
       // read all data from group
@@ -1019,6 +1101,7 @@ void DBImpl::RunCoLocationGC() {
         value = grouped_vlog->group_vlogs[group_index]->ReadRecord2(offset, value_size);
         offset += value_size;
 
+        // std::cout << "key size: " << key_size << ", value size: " << value_size << std::endl;
         // Step 3: Validate the record
         if (true) {
             // Add valid records to the list
@@ -1040,12 +1123,12 @@ void DBImpl::RunCoLocationGC() {
       }
 
       for (const auto& record : valid_records) {
-        auto vaddr = grouped_vlog->AddRecord(record.first, record.second);
+        auto vaddr = grouped_vlog->group_vlogs[group_index]->AddRecord2(record.first, record.second);
         
-        char buffer[sizeof(int) + sizeof(uint64_t) + sizeof(uint32_t)];
-        EncodeFixed32(buffer, vaddr.first);       // Group index
-        EncodeFixed64(buffer + sizeof(int), vaddr.second);  // Address
-        EncodeFixed32(buffer + sizeof(int) + sizeof(uint64_t), record.second.size()); // Value size
+        char buffer[sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t)];
+        EncodeFixed32(buffer, group_index);       // Group index
+        EncodeFixed64(buffer + sizeof(uint32_t), vaddr);  // Address
+        EncodeFixed32(buffer + sizeof(uint32_t) + sizeof(uint64_t), record.second.size()); // Value size
 
         // Optionally print the progress (for debugging)
         // std::cout << "Put: < " <<  vaddr.first << ", " << vaddr.second << ", " << record.second.size() << ">" << std::endl;
@@ -1057,10 +1140,9 @@ void DBImpl::RunCoLocationGC() {
         if(adgMod::use_secondary_index) {
           std::string secondary_key;
 
-          std::string index_key = adgMod::fill_value("index", 8);
-          secondary_key.append(index_key, 8);
+          secondary_key.append(adgMod::fill_value("index", 8));
           secondary_key.append(std::string(record.second.data(), 12));
-          secondary_key.append(std::string(record.first.data(), 16));
+          secondary_key.append(std::string(record.first.data(), 24));
           DB::Put(o, secondary_key, leveldb::Slice(buffer, sizeof(buffer)));
         }
     }
@@ -2257,7 +2339,7 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
     const int GC_THRESHOLD = 100000;  // Threshold for triggering GC
 
     // 有secondary index
-    if(adgMod::use_secondary_index) {
+    if(true) {
       string value;
       ReadOptions read_options;
       auto s = PreGet(read_options, key, &value);
@@ -2268,7 +2350,7 @@ Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
 
     write_count++;
     if (write_count >= GC_THRESHOLD) {
-        RunCoLocationGC();
+        // RunCoLocationGC();
         write_count = 0;  // Reset the counter after GC
     }
 
@@ -2323,7 +2405,9 @@ Status DBImpl::sPut(const WriteOptions& o, const Slice& key, const Slice &skey, 
 
     write_count++;
     if (write_count >= GC_THRESHOLD) {
-        RunCoLocationGC();
+        if(!adgMod::use_secondary_index) {
+          RunCoLocationGC();
+        }
         write_count = 0;  // Reset the counter after GC
     }
 

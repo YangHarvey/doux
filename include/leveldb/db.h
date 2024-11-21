@@ -96,6 +96,8 @@ class LEVELDB_EXPORT DB {
   virtual Status PreGet(const ReadOptions& options, const Slice& key,
                         std::string* value) = 0;
 
+  virtual void runAllColocationGC() = 0;
+
   virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value) = 0;
   
   virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,

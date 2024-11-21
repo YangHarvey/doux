@@ -251,6 +251,8 @@ int main(int argc, char *argv[]) {
             instance->PauseTimer(9, true);
             cout << "Put Complete" << endl;
 
+            db->runAllColocationGC();
+
             keys.clear();
             adgMod::db->WaitForBackground();
             if (print_file_info && iteration == 0) db->PrintFileInfo();
@@ -470,7 +472,7 @@ int main(int argc, char *argv[]) {
                     }
                     default: assert(false && "Unsupported workload type.");
                 }
-
+                
                 // Stat
                 if ((i + 1) % (num_operations / 100) == 0) {
                     detailed_times.push_back(instance->GetTime());

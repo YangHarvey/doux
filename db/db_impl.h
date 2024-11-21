@@ -64,6 +64,7 @@ class DBImpl : public DB {
   // with secondary index
   virtual Status sPut(const WriteOptions& options, const Slice& key, const Slice &skey, const std::string& value);
   virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value);
+  virtual void runAllColocationGC();
   // virtual Status sScan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
   //                   uint64_t length_range, std::vector<std::string>& res);
 
@@ -102,6 +103,9 @@ class DBImpl : public DB {
 
   // RISE
   adgMod::GroupValueLog *grouped_vlog;
+
+  // dropmap
+  // std::unordered_set<leveldb::Slice> drop_map;
 
 private:
   friend class DB;

@@ -2045,6 +2045,10 @@ class ModelDB : public DB {
     assert(false);  // Not implemented
     return Status::NotFound(key);
   }
+  void runAllColocationGC() {
+    assert(false);  // Not implemented
+    return ;
+  }
   virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value) {
     assert(false);  // Not implemented
     return ;

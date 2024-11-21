@@ -12,3 +12,5 @@ tpch_diffkv/
 tpch_wisckey/
 ycsb/
 tpch/
+microbenchmark/
+mircobenchmark/

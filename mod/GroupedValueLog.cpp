@@ -1,4 +1,6 @@
 #include "GroupedValueLog.h"
+#include "util/hash.h"
+
 #include <iostream>
 #include <functional>
 
@@ -22,8 +24,11 @@ GroupValueLog::~GroupValueLog() {
 
 uint32_t GroupValueLog::GetGroupIndex(const leveldb::Slice& key) {
     // Hash the key to determine the group index
-    std::hash<std::string> hasher;
-    return hasher(key.ToString()) % num_groups;
+    // std::hash<std::string> hasher;
+    // return hasher(key.ToString()) % num_groups;
+
+    uint32_t group_index = leveldb::Hash(key.data(), key.size(), 0);
+    return group_index % num_groups;
 }
 
 std::pair<uint32_t, uint64_t> GroupValueLog::AddRecord(const leveldb::Slice& key, const leveldb::Slice& value) {
