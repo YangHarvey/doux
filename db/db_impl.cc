@@ -561,7 +561,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   Status s;
   {
     mutex_.Unlock();
-    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+    if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
       s = BuildDuTable(dbname_, env_, options_, table_cache_, iter, &meta, &vmeta, &arena);
     } else {
       s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
@@ -931,7 +931,7 @@ void DBImpl::BackgroundCompaction() {
     manual_compaction_ = nullptr;
   }
 
-  if (adgMod::MOD == 10) {
+  if (adgMod::MOD == 10 || adgMod::MOD == 13) {
     instance->StartTimer(7);
     Compaction* vc = versions_->PickVCompaction();
 
@@ -1418,7 +1418,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     // if (compact->compaction->level() == 0) {
     //   compact->compaction->AddVInputDeletions(compact->compaction->edit());    
     // }
-  } else if (adgMod::MOD == 10) {
+  } else if (adgMod::MOD == 10 || adgMod::MOD == 13) {
     compact->compaction->AddVInputDeletions(compact->compaction->edit());
   }
   // if (adgMod::MOD == 9) {
@@ -1437,6 +1437,8 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     int next_level = level + 1;
     if (adgMod::MOD == 10) {
       next_level = compact->compaction->num_input_vfiles(1) > 0 ? 1 : 0;
+    } else if (adgMod::MOD == 13) {
+      next_level = compact->compaction->num_input_vfiles(1);
     }
     compact->compaction->edit()->AddVFile(next_level, out.number, out.file_size,
                                           out.smallest, out.largest);
@@ -1468,6 +1470,8 @@ inline Slice DBImpl::ConstructSlice(const Slice& from, Arena* arena) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
+  // std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
@@ -1570,6 +1574,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         compact->compaction->IsBaseLevelForKey(ikey.user_key),
         (int)last_sequence_for_key, (int)compact->smallest_snapshot);
 #endif
+    // DropMap
+    if(drop && adgMod::MOD == 10 && adgMod::use_dropmap) {
+      drop_map.insert(std::string(ikey.user_key.data(), ikey.user_key.size()));
+      adgMod::drop_map_size++;
+    }
+
     if (!drop) {
       if (adgMod::MOD == 9) {
         Slice value = input->value();
@@ -1820,6 +1830,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 }
 
 Status DBImpl::DoVCompactionWork(CompactionState* compact) {
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+
   Log(options_.info_log, "Compacting %d@%d + %d@%d vfiles",
       compact->compaction->num_input_vfiles(0), compact->compaction->level(),
       compact->compaction->num_input_vfiles(1), compact->compaction->level() + 1);
@@ -1891,14 +1903,41 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     const ParsedInternalKey& ikey = map_it.second.first;
     if (ikey.type != kTypeDeletion) {
       Slice vkey(ikey.user_key.data(), ikey.user_key.size() + 16);
+
+      // Validation Phase
+      if(!adgMod::use_dropmap) {
+        string lsm_value;
+        Status lsm_status = Get(ReadOptions(), ikey.user_key, &lsm_value);
+        if(!lsm_status.ok()) {
+          Log(options_.info_log, "Key %s not found in LSM-tree, skipping.", ikey.user_key.ToString().c_str());
+          continue;
+        }
+      } else {
+        // use dropmap
+        if(drop_map.find(std::string(ikey.user_key.data(), ikey.user_key.size())) == drop_map.end() && rand() % 3 == 0) {
+          string lsm_value;
+          Status lsm_status = PreGet(ReadOptions(), ikey.user_key, &lsm_value);
+          if(!lsm_status.ok()) {
+            Log(options_.info_log, "Key %s not found in LSM-tree, skipping.", ikey.user_key.ToString().c_str());
+            continue;
+          }
+        } {
+          adgMod::drop_count_gain++;
+        }
+      }
+
       kvs.push_back({vkey, map_it.second.second});
     }
   }
+
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
   status = OpenCompactionVOutputFile(compact);
   if (!status.ok()) {
     return status;
   }
+
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
   std::sort(kvs.begin(), kvs.end(), VKCompare);
   Slice min_key = kvs[0].first;
@@ -1909,9 +1948,13 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     compact->vbuilder->Add(kvs[i].first, kvs[i].second);
   }
 
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+
   status = FinishCompactionVOutputFile(compact);
   key_map.clear();
   kvs.clear();
+
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
   mutex_.Lock();
   if (status.ok()) {
@@ -1921,8 +1964,42 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     RecordBackgroundError(status);
   }
 
+  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+  if (status.ok() && adgMod::MOD == 10 && !adgMod::if_decoupled_compaction) {
+    std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+    Log(options_.info_log, "Starting post-VCompaction LSM-tree Compactions...");
+    for (int i = 0; i < 100; ++i) {
+      Status compaction_status = TriggerLSMTreeCompaction();
+      if (!compaction_status.ok()) {
+        Log(options_.info_log, "Error during LSM-tree Compaction %d: %s", i + 1, compaction_status.ToString().c_str());
+        return compaction_status; 
+      }
+      Log(options_.info_log, "Completed LSM-tree Compaction %d", i + 1);
+    }
+  }
+
   return status;
 }
+
+// for vo-tree, trigger lsm compaction
+Status DBImpl::TriggerLSMTreeCompaction() {
+  // Identify a compaction task
+  Compaction* compaction = versions_->PickCompaction();
+  if (!compaction) {
+    Log(options_.info_log, "No compaction tasks available.");
+    return Status::OK(); // No compaction needed
+  }
+
+  CompactionState* compaction_state = new CompactionState(compaction);
+  Status status = DoCompactionWork(compaction_state);
+  delete compaction_state;
+
+  if (!status.ok()) {
+    Log(options_.info_log, "Compaction failed: %s", status.ToString().c_str());
+  }
+  return status;
+}
+
 
 namespace {
 
@@ -2101,15 +2178,22 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
         uint64_t file_size = 0;
         uint32_t block_number = DecodeFixed32(value->c_str() + sizeof(uint32_t));
         uint32_t block_offset = DecodeFixed32(value->c_str() + sizeof(uint32_t) * 2);
+
         if (current->dep_.FindParent(file_number) != 0) {
+          instance->StartTimer(19);
           file_number = current->dep_.FindParent(file_number);
           file_size = current->vfile_map_[file_number]->file_size;
           current->GetFromMergedVFile(options, lkey, value, file_number, file_size,
                                       block_number, block_offset, &stats);
+          adgMod::redirect_count++;
+          instance->PauseTimer(19);
         } else {
+          instance->StartTimer(18);
           file_size = current->vfile_map_[file_number]->file_size;
           current->GetFromVFile(options, lkey, value, file_number, file_size,
                                 block_number, block_offset, &stats);
+          adgMod::direct_count++;
+          instance->PauseTimer(18);
         }
 #ifdef INTERNAL_TIMER
         instance->PauseTimer(12);
@@ -2250,14 +2334,21 @@ void DBImpl::Scan(const ReadOptions& options, const Slice& key, const std::vecto
         uint64_t file_size = current->vfile_map_[file_number]->file_size;
         uint32_t block_number = DecodeFixed32(values[i].data() + sizeof(uint32_t));
         uint32_t block_offset = DecodeFixed32(values[i].data() + sizeof(uint32_t) * 2);
-        if (current->dep_.FindParent(file_number) != 0) {
+        if (current->dep_.FindParent(file_number) != 0 && adgMod::if_decoupled_compaction) {
+          instance->StartTimer(19);
+
           file_number = current->dep_.FindParent(file_number);
           file_size = current->vfile_map_[file_number]->file_size;
           current->GetFromMergedVFile(options, lkey, &cur_res, file_number, file_size,
                                       block_number, block_offset, &stats);
+          adgMod::redirect_count++;
+          instance->PauseTimer(19);
         } else {
+          instance->StartTimer(18);
           current->GetFromVFile(options, lkey, &cur_res, file_number, file_size,
                                 block_number, block_offset, &stats);
+          adgMod::direct_count++;
+          instance->PauseTimer(18);
         }
         res.push_back(cur_res);
 #ifdef INTERNAL_TIMER

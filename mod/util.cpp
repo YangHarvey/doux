@@ -10,6 +10,15 @@ namespace adgMod {
     int MOD = 0;
     bool use_secondary_index = false;
 
+    bool use_dropmap = false;
+    bool if_decoupled_compaction = true;
+
+    uint32_t drop_count_gain = 0; 
+    uint32_t drop_map_size = 0;
+
+    uint32_t redirect_count = 0;
+    uint32_t direct_count = 0;
+
     bool string_mode = true;
     uint64_t key_multiple = 1;
     uint32_t model_error = 10;

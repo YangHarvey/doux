@@ -91,7 +91,7 @@ Slice ConstructVKey(const Slice& key, const Slice& value, Arena* arena) {
     uint64_t sort_key = val1;
     sort_key = (sort_key << 32) | val2;
     EncodeFixed64(p, sort_key);
-  } else if (adgMod::MOD == 10) {
+  } else if (adgMod::MOD == 10 || adgMod::MOD == 13) {
     doux::MortonCode<2, 32> sort_key(0);
     sort_key.Encode({val1, val2});
     EncodeFixed64(p, sort_key.data_);
@@ -136,7 +136,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       kvs.emplace_back(tmpKey, info);
     }
 
-    if (adgMod::MOD == 10) {
+    if (adgMod::MOD == 10 || adgMod::MOD == 13) {
       std::sort(kvs.begin(), kvs.end(), VCompare);
     }
 
@@ -193,14 +193,14 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       return s;
     }
 
-    if (adgMod::MOD == 10) {
+    if (adgMod::MOD == 10 || adgMod::MOD == 13) {
       std::sort(kvs.begin(), kvs.end(), KCompare);
     }
 
     TableBuilder* builder = new TableBuilder(options, file);
     Slice min_key = kvs[0].first;
     Slice max_key = kvs[kvs.size() - 1].first;
-    if (adgMod::MOD == 10) {
+    if (adgMod::MOD == 10 || adgMod::MOD == 13) {
       min_key.remove_suffix(8);
       max_key.remove_suffix(8);
     }
@@ -213,7 +213,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       EncodeFixed32(buffer, kv.second.file_number);
       EncodeFixed32(buffer + sizeof(uint32_t), kv.second.block_number);
       EncodeFixed32(buffer + sizeof(uint32_t) * 2, kv.second.block_offset);
-      if (adgMod::MOD == 10) {
+      if (adgMod::MOD == 10 || adgMod::MOD == 13) {
         key.remove_suffix(8);
       }
       builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 3});

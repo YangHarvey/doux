@@ -395,8 +395,10 @@ if(LEVELDB_BUILD_TESTS)
     leveldb_test("${PROJECT_SOURCE_DIR}/mod/read.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/mod/read_cold.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench_2.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_2.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_3.cc")
 
 
     # TODO(costan): This test also uses

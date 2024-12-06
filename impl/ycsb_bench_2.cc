@@ -156,6 +156,7 @@ int main(int argc, char *argv[]) {
             ("t,load_type", "load type", cxxopts::value<int>(load_type)->default_value("0"))
             ("filter", "use filter", cxxopts::value<bool>(adgMod::use_filter)->default_value("false"))
             ("use_dropmap", "if use drop map", cxxopts::value<bool>(adgMod::use_dropmap)->default_value("true"))
+            ("decoupled_compaction", "if use decoupled compaction", cxxopts::value<bool>(adgMod::if_decoupled_compaction)->default_value("true"))
             ("range", "use range query and specify length", cxxopts::value<int>(length_range)->default_value("100"));
 
     auto result = commandline_options.parse(argc, argv);
@@ -252,12 +253,12 @@ int main(int argc, char *argv[]) {
             instance->PauseTimer(9, true);
             cout << "Put Complete" << endl;
 
-            instance->StartTimer(19);
+            // instance->StartTimer(19);
             if(adgMod::MOD == 12) {
                 // RISE need colocationGC
                 db->runAllColocationGC();
             }
-            instance->PauseTimer(19, true);
+            // instance->PauseTimer(19, true);
 
             keys.clear();
             adgMod::db->WaitForBackground();
@@ -291,11 +292,7 @@ int main(int argc, char *argv[]) {
             std::vector<uint64_t> detailed_times;
             bool start_new_event = true;
 
-            // std::unordered_set<string> unique_keys;
-            // for (int i = 0; i < keys.size(); ++i) {
-            //     unique_keys.emplace(keys[i]);
-            // }
-            // cout << "keys.size: " << keys.size() << ", unique_keys.size: " << unique_keys.size() << endl;
+            std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
             instance->StartTimer(13);
             for (int i = 0; i < num_operations; ++i) {
@@ -578,6 +575,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    std::cout << "adgmod::drop_map_size = " << adgMod::drop_map_size << std::endl;
     std::cout << "adgmod::drop_count_gain = " << adgMod::drop_count_gain << std::endl;
-
+    std::cout << "adgMod::redirect_count = " << adgMod::redirect_count << std::endl;
+    std::cout << "adgMod::direct_count = " << adgMod::direct_count << std::endl;
 }

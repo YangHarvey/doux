@@ -27,6 +27,14 @@ namespace adgMod {
     class FileStats;
 
     extern int MOD;
+    extern bool use_dropmap;
+    extern bool if_decoupled_compaction;
+    extern uint32_t drop_count_gain;
+    extern uint32_t drop_map_size;
+
+    extern uint32_t redirect_count;
+    extern uint32_t direct_count;
+
     extern bool use_secondary_index;
     extern bool string_mode;
     extern uint64_t key_multiple;

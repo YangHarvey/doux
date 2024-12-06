@@ -126,15 +126,31 @@ class DBIter : public Iterator {
       uint32_t block_number = DecodeFixed32(vaddr.data() + sizeof(uint32_t));
       uint32_t block_offset = DecodeFixed32(vaddr.data() + sizeof(uint32_t) * 2);
       string cur_res;
+
       if (adgMod::db->versions_->current()->dep_.FindParent(file_number) != 0) {
+        #ifdef INTERNAL_TIMER
+        instance->StartTimer(19);
+        #endif
+
         file_number = adgMod::db->versions_->current()->dep_.FindParent(file_number);
         file_size = adgMod::db->versions_->current()->vfile_map_[file_number]->file_size;
         adgMod::db->versions_->current()->GetFromMergedVFile(
           adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
+        adgMod::redirect_count++;
+        #ifdef INTERNAL_TIMER
+        instance->PauseTimer(19);
+        #endif
       } else {
+        #ifdef INTERNAL_TIMER
+        instance->StartTimer(18);
+        #endif
         file_size = adgMod::db->versions_->current()->vfile_map_[file_number]->file_size;
         adgMod::db->versions_->current()->GetFromVFile(
           adgMod::read_options, lkey, &cur_res, file_number, file_size, block_number, block_offset, &stats);
+        adgMod::direct_count++;
+        #ifdef INTERNAL_TIMER
+        instance->PauseTimer(18);
+        #endif
       }
 #ifdef INTERNAL_TIMER
       instance->PauseTimer(12);
