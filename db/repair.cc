@@ -320,6 +320,7 @@ class Repairer {
       s = builder->Finish();
       if (s.ok()) {
         t.meta.file_size = builder->FileSize();
+        t.meta.num_keys = builder->NumEntries();
       }
     }
     delete builder;

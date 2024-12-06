@@ -72,6 +72,11 @@ class LEVELDB_EXPORT Slice {
     size_ -= n;
   }
 
+  void remove_suffix(size_t n) {
+    assert(n <= size());
+    size_ -= n;
+  }
+
   // Return a string that contains the copy of the referenced data.
   std::string ToString() const { return std::string(data_, size_); }
 
@@ -109,6 +114,26 @@ inline int Slice::compare(const Slice& b) const {
   }
   return r;
 }
+
+struct HashSliceV2 {
+  std::size_t operator()(const Slice& s) const {
+    std::size_t hash = 0;
+    const char* data = s.data();
+    std::size_t sz = s.size();
+
+    for (size_t i = 0; i < sz; ++i) {
+      hash = (hash * 31) + static_cast<std::size_t>(data[i]);
+    }
+    return hash;
+  }
+};
+
+struct SliceEqualTo {
+  bool operator()(const Slice& a, const Slice& b) const {
+    return a.size() == b.size() &&
+           memcmp(a.data(), b.data(), a.size()) == 0;
+  }
+};
 
 }  // namespace leveldb
 

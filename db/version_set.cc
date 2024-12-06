@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <iterator>
 
 #include "db/filename.h"
 #include "db/log_reader.h"
@@ -24,6 +25,8 @@
 #include "mod/learned_index.h"
 
 namespace leveldb {
+
+uint64_t Compaction::merge_num_ = 0;
 
 static size_t TargetFileSize(const Options* options) {
   return options->max_file_size;
@@ -261,25 +264,83 @@ void Version::AddIterators(const ReadOptions& options,
   }
 }
 
+void Version::AddVIterators(const ReadOptions& options,
+                            std::vector<Iterator*>* iters) {
+  for (size_t i = 0; i < vfiles_[0].size(); i++) {
+    FileMetaData* vf = vfiles_[0][i];
+    Iterator* it;
+    if (vtables_.find(vf->number) == vtables_.end()) {
+      std::string vfname = VTableFileName(vset_->dbname_, vf->number);
+      RandomAccessFile* file = nullptr;
+      Table* table = nullptr;
+      Status s = vset_->env_->NewRandomAccessFile(vfname, &file);
+      if (s.ok()) {
+        s = Table::Open(*(vset_->options_), file, vf->file_size, &table);
+        vtables_[vf->number] = table;
+        it = table->NewVIterator(options);
+      }
+    } else {
+      it = vtables_[vf->number]->NewVIterator(options);
+    }
+    assert(it != nullptr);
+    iters->push_back(it);
+  }
+
+  int max_level = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+  const Comparator* vkcmp = VKeyComparator();
+  for (int level = 1; level < max_level; level++) {
+    for (int i = 0; i < vfiles_[level].size(); i++) {
+      FileMetaData* vf = vfiles_[level][i];
+      if (adgMod::MOD == 10) {
+        ParsedInternalKey iSmallest, iLargest;
+        ParseInternalVKey(vf->smallest.Encode(), &iSmallest);
+        ParseInternalVKey(vf->largest.Encode(), &iLargest);
+        if (options.start > iLargest.sort_key || options.end < iSmallest.sort_key) {
+          continue;
+        }
+      }
+
+      Iterator* it;
+      if (vtables_.find(vf->number) == vtables_.end()) {
+        std::string vfname = VTableFileName(vset_->dbname_, vf->number);
+        RandomAccessFile* file = nullptr;
+        Table* table = nullptr;
+        Status s = vset_->env_->NewRandomAccessFile(vfname, &file);
+        if (s.ok()) {
+          s = Table::Open(*(vset_->options_), file, vf->file_size, &table);
+          vtables_[vf->number] = table;
+          it = table->NewVIterator(options);
+        }
+      } else {
+        it = vtables_[vf->number]->NewVIterator(options);
+      }
+      assert(it != nullptr);
+      iters->push_back(it);
+    }
+  }
+}
+
 // Callback from TableCache::Get()
-namespace {
-enum SaverState {
-  kNotFound,
-  kFound,
-  kDeleted,
-  kCorrupt,
-};
-struct Saver {
-  SaverState state;
-  const Comparator* ucmp;
-  Slice user_key;
-  std::string* value;
-};
-}  // namespace
+
 static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   Saver* s = reinterpret_cast<Saver*>(arg);
   ParsedInternalKey parsed_key;
   if (!ParseInternalKey(ikey, &parsed_key)) {
+    s->state = kCorrupt;
+  } else {
+    if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
+      s->state = (parsed_key.type == kTypeValue) ? kFound : kDeleted;
+      if (s->state == kFound) {
+        s->value->assign(v.data(), v.size());
+      }
+    }
+  }
+}
+
+static void SaveValueV2(void* arg, const Slice& ikey, const Slice& v) {
+  Saver* s = reinterpret_cast<Saver*>(arg);
+  ParsedInternalKey parsed_key;
+  if (!ParseInternalVKey(ikey, &parsed_key)) {
     s->state = kCorrupt;
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
@@ -397,69 +458,69 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       files = &tmp[0];
       num_files = tmp.size();
     } else {
-        if (adgMod::MOD == 6 || adgMod::MOD == 7) {
-            adgMod::LearnedIndexData* learned_this_level = learned_index_data_[level].get();
-            if (learned_this_level->Learned(this, adgMod::db->version_count, level)) {
-                //std::cout << "using model" << std::endl;
-                learned = true;
-                std::pair<uint64_t, uint64_t> bounds = learned_this_level->GetPosition(user_key);
+      if (adgMod::MOD == 6 || adgMod::MOD == 7) {
+        adgMod::LearnedIndexData* learned_this_level = learned_index_data_[level].get();
+        if (learned_this_level->Learned(this, adgMod::db->version_count, level)) {
+            //std::cout << "using model" << std::endl;
+            learned = true;
+            std::pair<uint64_t, uint64_t> bounds = learned_this_level->GetPosition(user_key);
 
-                //printf("%lu %lu\n", bounds.first, bounds.second);
+            //printf("%lu %lu\n", bounds.first, bounds.second);
 
-                size_t index;
-                if (bounds.first <= learned_this_level->MaxPosition()) {
-                    learned_this_level->num_entries_accumulated.Search(user_key, bounds.first, bounds.second, &index, &position_lower, &position_upper);
+            size_t index;
+            if (bounds.first <= learned_this_level->MaxPosition()) {
+                learned_this_level->num_entries_accumulated.Search(user_key, bounds.first, bounds.second, &index, &position_lower, &position_upper);
 
-                    //printf("%lu %lu %lu\n", index, position_lower, position_upper);
-                    FileMetaData* file = files_[level][index];
-                    if (ucmp->Compare(file->smallest.user_key(), user_key) <= 0) {
-                        files = &files_[level][index];
-                        num_files = 1;
-                    } else {
-                        files = nullptr;
-                        num_files = 0;
-                    }
-
+                //printf("%lu %lu %lu\n", index, position_lower, position_upper);
+                FileMetaData* file = files_[level][index];
+                if (ucmp->Compare(file->smallest.user_key(), user_key) <= 0) {
+                    files = &files_[level][index];
+                    num_files = 1;
                 } else {
                     files = nullptr;
                     num_files = 0;
                 }
+
             } else {
-                // Binary search to find earliest index whose largest key >= ikey.
-                uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-                if (index >= num_files) {
-                    files = nullptr;
-                    num_files = 0;
-                } else {
-                    tmp2 = files[index];
-                    if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
-                        // All of "tmp2" is past any data for user_key
-                        files = nullptr;
-                        num_files = 0;
-                    } else {
-                        files = &tmp2;
-                        num_files = 1;
-                    }
-                }
-            }
-        } else {
-            // Binary search to find earliest index whose largest key >= ikey.
-            uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-            if (index >= num_files) {
                 files = nullptr;
                 num_files = 0;
-            } else {
-                tmp2 = files[index];
-                if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
-                    // All of "tmp2" is past any data for user_key
-                    files = nullptr;
-                    num_files = 0;
-                } else {
-                    files = &tmp2;
-                    num_files = 1;
-                }
             }
+        } else {
+          // Binary search to find earliest index whose largest key >= ikey.
+          uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
+          if (index >= num_files) {
+            files = nullptr;
+            num_files = 0;
+          } else {
+            tmp2 = files[index];
+            if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
+              // All of "tmp2" is past any data for user_key
+              files = nullptr;
+              num_files = 0;
+            } else {
+              files = &tmp2;
+              num_files = 1;
+            }
+          }
         }
+      } else {
+        // Binary search to find earliest index whose largest key >= ikey.
+        uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
+        if (index >= num_files) {
+          files = nullptr;
+          num_files = 0;
+        } else {
+          tmp2 = files[index];
+          if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
+            // All of "tmp2" is past any data for user_key
+            files = nullptr;
+            num_files = 0;
+          } else {
+            files = &tmp2;
+            num_files = 1;
+          }
+        }
+      }
     }
 #ifdef INTERNAL_TIMER
     auto temp2 = instance->PauseTimer(0);
@@ -484,7 +545,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       adgMod::LearnedIndexData* model = nullptr;
       bool file_learned = false;
       instance->StartTimer(6);
-      if (adgMod::MOD == 0 || adgMod::MOD == 8) {
+      if (adgMod::MOD == 0 || adgMod::MOD == 8 || adgMod::MOD == 9 || adgMod::MOD == 10) {
         s = vset_->table_cache_->Get(options, f->number, f->file_size, ikey,
                                       &saver, SaveValue, level, f);
       } else {
@@ -517,7 +578,11 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
                 }
                 adgMod::file_stats_mutex.Unlock();
             }
-#endif
+#endif      
+            // if (adgMod::MOD == 9) {
+            //   value->assign(vset_->default_value_, sizeof(uint32_t) * 3);
+            //   s = Status();
+            // }
             break;  // Keep searching in other files
         }
         case kFound: {
@@ -544,7 +609,79 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     }
   }
 
-  return Status::NotFound(Slice());  // Use an empty error message for speed
+  return s;
+}
+
+Status Version::GetFromVFile(const ReadOptions& options, const LookupKey& key, std::string* val,
+                             uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                             uint32_t block_offset, GetStats* stats) {
+  Status s;
+  Slice ikey = key.internal_key();
+  Slice user_key = key.user_key();
+  const Comparator* ucmp = vset_->icmp_.user_comparator();
+
+  Saver saver;
+  saver.state = kNotFound;
+  saver.ucmp = ucmp;
+  saver.user_key = user_key;
+  saver.value = val;
+
+  if (vtables_.find(file_number) == vtables_.end()) {
+    std::string vfname = VTableFileName(vset_->dbname_, file_number);
+    RandomAccessFile* file = nullptr;
+    Table* table = nullptr;
+    s = vset_->env_->NewRandomAccessFile(vfname, &file);
+    if (s.ok()) {
+      s = Table::Open(*(vset_->options_), file, file_size, &table);
+      if (!s.ok()) {
+        assert(table == nullptr);
+        delete file;
+      } else {
+        vtables_[file_number] = table;
+        s = table->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
+      }
+    }
+  } else {
+    s = vtables_[file_number]->InternalVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
+  }
+
+  return s;
+}
+
+Status Version::GetFromMergedVFile(const ReadOptions& options, const LookupKey& key, std::string* val,
+                                   uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                                   uint32_t block_offset, GetStats* stats) {
+  Status s;
+  Slice ikey = key.internal_key();
+  Slice user_key = key.user_key();
+  const Comparator* ucmp = vset_->icmp_.user_comparator();
+
+  Saver saver;
+  saver.state = kNotFound;
+  saver.ucmp = ucmp;
+  saver.user_key = user_key;
+  saver.value = val;
+
+  if (vtables_.find(file_number) == vtables_.end()) {
+    std::string vfname = VTableFileName(vset_->dbname_, file_number);
+    RandomAccessFile* file = nullptr;
+    Table* table = nullptr;
+    s = vset_->env_->NewRandomAccessFile(vfname, &file);
+    if (s.ok()) {
+      s = Table::Open(*(vset_->options_), file, file_size, &table);
+      if (!s.ok()) {
+        assert(table == nullptr);
+        delete file;
+      } else {
+        vtables_[file_number] = table;
+        s = table->MergedVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
+      }
+    }
+  } else {
+    s = vtables_[file_number]->MergedVGet(options, ikey, &saver, SaveValueV2, block_number, block_offset);
+  }
+
+  return s;
 }
 
 bool Version::UpdateStats(const GetStats& stats) {
@@ -685,6 +822,57 @@ void Version::GetOverlappingInputs(int level, const InternalKey* begin,
   }
 }
 
+void Version::SetVInput(int which,
+                        std::vector<FileMetaData*>* inputs, 
+                        std::vector<FileMetaData*>* vinputs) {
+  for (int level = 0; level < 2; level++) {
+    for (int i = 0; i < inputs[level].size(); i++) {
+      for (int j = 0; j < vfiles_[which + level].size(); j++) {
+        if (inputs[level][i]->number == vfiles_[which + level][j]->number) {
+          FileMetaData* vmeta = vfiles_[which + level][j];
+          vinputs[level].push_back(vmeta);
+          break;
+        }
+      }
+    }
+    assert(inputs[level].size() == vinputs[level].size());
+  }
+}
+
+void Version::SetVInputV2(int which,
+                          const std::unordered_set<uint32_t>& vfiles,
+                          std::vector<FileMetaData*>* vinputs) {
+  int max_stalled_level = 0;
+  if (adgMod::value_size <= 256) {
+    max_stalled_level = 3;
+  } else if (adgMod::value_size <= 4096) {
+    max_stalled_level = 2;
+  } else {
+    max_stalled_level = 1;
+  }
+
+  if (which >= max_stalled_level) {
+    for (int level = 0; level <= which; ++level) {
+      for (int i = 0; i < vfiles_[level].size(); ++i) {
+        FileMetaData* vmeta = vfiles_[level][i];
+        if (vfiles.find(vmeta->number) != vfiles.end()) {
+          vinputs[0].push_back(vmeta);
+        }
+      }
+    }
+  }
+  // for (const uint32_t number : vfiles) {
+  //   for (int i = 0; i < vfiles_[which].size(); i++) {
+  //     FileMetaData* vmeta = vfiles_[which][i];
+  //     if (number == vmeta->number) {
+  //       vinputs[0].push_back(vmeta);
+  //       break;
+  //     }
+  //   }
+  // }
+  assert(vfiles.size() >= vinputs[0].size());
+}
+
 std::string Version::DebugString() const {
   std::string r;
   for (int level = 0; level < config::kNumLevels; level++) {
@@ -718,7 +906,7 @@ class VersionSet::Builder {
  private:
   // Helper to sort by v->files_[file_number].smallest
   struct BySmallestKey {
-    const InternalKeyComparator* internal_comparator;
+    const Comparator* internal_comparator;
 
     bool operator()(FileMetaData* f1, FileMetaData* f2) const {
       int r = internal_comparator->Compare(f1->smallest, f2->smallest);
@@ -740,6 +928,8 @@ class VersionSet::Builder {
   VersionSet* vset_;
   Version* base_;
   LevelState levels_[config::kNumLevels];
+  std::vector<LevelState> vlevels_;
+  doux::Dependency cur_dep_;
 
  public:
   // Initialize a builder with the files from *base and other info from *vset
@@ -749,6 +939,13 @@ class VersionSet::Builder {
     cmp.internal_comparator = &vset_->icmp_;
     for (int level = 0; level < config::kNumLevels; level++) {
       levels_[level].added_files = new FileSet(cmp);
+    }
+    
+    cmp.internal_comparator = adgMod::MOD == 10 ? VKeyComparator() : &vset_->icmp_;
+    size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    vlevels_.resize(sz);
+    for (int level = 0; level < sz; level++) {
+      vlevels_[level].added_files = new FileSet(cmp);
     }
   }
 
@@ -770,6 +967,24 @@ class VersionSet::Builder {
         }
       }
     }
+
+    if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+      for (int level = 0; level < sz; level++) {
+        const FileSet* added = vlevels_[level].added_files;
+        std::vector<FileMetaData*> to_unref;
+        std::copy(added->begin(), added->end(), std::back_inserter(to_unref));
+        delete added;
+        for (uint32_t i = 0; i < to_unref.size(); i++) {
+          FileMetaData* f = to_unref[i];
+          f->refs--;
+          if (f->refs <= 0) {
+            delete f;
+          }
+        }
+      }
+    }
+
     base_->Unref();
   }
 
@@ -781,6 +996,12 @@ class VersionSet::Builder {
       vset_->compact_pointer_[level] =
           edit->compact_pointers_[i].second.Encode().ToString();
     }
+    for (size_t i = 0; i < edit->compact_vpointers_.size(); i++) {
+      const int level = edit->compact_pointers_[i].first;
+      vset_->compact_vpointers_[level] = 
+          edit->compact_vpointers_[i].second.Encode().ToString();
+    }
+
 
     // Delete files
     const VersionEdit::DeletedFileSet& del = edit->deleted_files_;
@@ -789,6 +1010,13 @@ class VersionSet::Builder {
       const int level = iter->first;
       const uint64_t number = iter->second;
       levels_[level].deleted_files.insert(number);
+    }
+    const VersionEdit::DeletedFileSet& vdel = edit->deleted_vfiles_;
+    for (VersionEdit::DeletedFileSet::const_iterator iter = vdel.begin();
+         iter != vdel.end(); ++iter) {
+      const int level = iter->first;
+      const uint64_t number = iter->second;
+      vlevels_[level].deleted_files.insert(number);
     }
 
     // Add new files
@@ -810,11 +1038,29 @@ class VersionSet::Builder {
       // same as the compaction of 40KB of data.  We are a little
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
+
       f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
       levels_[level].deleted_files.erase(f->number);
       levels_[level].added_files->insert(f);
+    }
+    
+    size_t vfile_size = edit->new_vfiles_.size();
+    for (size_t i = 0; i < vfile_size; i++) {
+      const int level = edit->new_vfiles_[i].first;
+      FileMetaData* f = new FileMetaData(edit->new_vfiles_[i].second);
+      f->refs = 1;
+
+      // f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
+      // if (f->allowed_seeks < 100) f->allowed_seeks = 100;
+
+      vlevels_[level].deleted_files.erase(f->number);
+      vlevels_[level].added_files->insert(f);
+    }
+
+    for (const auto& it : edit->dep_.dep_map_) {
+      cur_dep_.SetParent(it.second, it.first);
     }
   }
 
@@ -822,6 +1068,7 @@ class VersionSet::Builder {
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
+
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
@@ -863,6 +1110,58 @@ class VersionSet::Builder {
       }
 #endif
     }
+
+  if (adgMod::MOD == 9 || adgMod::MOD == 10) {
+      if (adgMod::MOD == 10) {
+        cmp.internal_comparator = VKeyComparator();
+      }
+      size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+      if (adgMod::MOD == 10) {
+        for (int level = 0; level < sz; level++) {
+          const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
+          std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
+          std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
+          const FileSet* added = vlevels_[level].added_files;
+          v->vfiles_[level].reserve(base_files.size() + added->size());
+          for (FileSet::const_iterator added_iter = added->begin();
+              added_iter != added->end(); ++added_iter) {
+            for (std::vector<FileMetaData*>::const_iterator bpos = 
+                    std::upper_bound(base_iter, base_end, *added_iter, cmp);
+                base_iter != bpos; ++base_iter) {
+              MaybeAddVFile(v, level, *base_iter);
+            }
+            MaybeAddVFile(v, level, *added_iter);
+          }
+
+          for (; base_iter != base_end; ++base_iter) {
+            MaybeAddVFile(v, level, *base_iter);
+          }
+        }
+      } else if (adgMod::MOD == 9) {
+        for (int level = 0; level < sz; level++) {
+          const std::vector<FileMetaData*>& base_files = base_->vfiles_[level];
+          const FileSet* added = vlevels_[level].added_files;
+          v->vfiles_[level].reserve(base_files.size() + added->size());
+          for (auto it = base_files.begin(); it != base_files.end(); ++it) {
+            MaybeAddVFile(v, level, *it);
+          }
+          for (FileSet::const_iterator added_iter = added->begin();
+               added_iter != added->end(); ++added_iter) {
+            MaybeAddVFile(v, level, *added_iter);
+          }
+        }
+      }
+    }
+
+    if (adgMod::MOD == 10) {
+      for (const auto& it : base_->dep_.dep_map_) {
+        v->dep_.SetParent(it.second, it.first);
+      }
+      for (const auto& it : cur_dep_.dep_map_) {
+        v->dep_.SetParent(it.second, it.first);
+      }
+    }
+
   }
 
   void MaybeAddFile(Version* v, int level, FileMetaData* f) {
@@ -877,6 +1176,21 @@ class VersionSet::Builder {
       }
       f->refs++;
       files->push_back(f);
+    }
+  }
+
+  void MaybeAddVFile(Version* v, int level, FileMetaData* f) {
+    if (vlevels_[level].deleted_files.count(f->number) > 0) {
+      // File is deleted: do nothing
+    } else {
+      std::vector<FileMetaData*>* files = &v->vfiles_[level];
+      if (level > 0 && !files->empty()) {
+        const Comparator* cmp = adgMod::MOD == 10 ? VKeyComparator() : &vset_->icmp_;
+        // assert(cmp->Compare((*files)[files->size() - 1]->largest, f->smallest) < 0);
+      }
+      f->refs++;
+      files->push_back(f);
+      v->vfile_map_[f->number] = f;
     }
   }
 };
@@ -898,6 +1212,8 @@ VersionSet::VersionSet(const std::string& dbname, const Options* options,
       descriptor_log_(nullptr),
       dummy_versions_(this),
       current_(nullptr) {
+  size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+  compact_vpointers_.resize(sz);
   AppendVersion(new Version(this));
 }
 
@@ -918,6 +1234,9 @@ void VersionSet::AppendVersion(Version* v) {
     current_->Unref();
   }
   current_ = v;
+  for (const auto& it : v->vtables_) {
+    current_->vtables_[it.first] = it.second;
+  }
   v->Ref();
 
   // Append to linked list
@@ -925,6 +1244,15 @@ void VersionSet::AppendVersion(Version* v) {
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;
   v->next_->prev_ = v;
+
+  if (v->vfiles_.size() > 0 && v->vfiles_[0].size() > 0) {
+    FileMetaData* vf = v->vfiles_[0][0];
+    if (vf) {
+      EncodeFixed32(default_value_, vf->number);
+      EncodeFixed32(default_value_ + sizeof(uint32_t), 0);
+      EncodeFixed32(default_value_ + sizeof(uint32_t) * 2, 0);
+    }
+  }
 }
 
 void VersionSet::ApplyToModel(VersionEdit* edit, Version* previous, Version* current) {
@@ -1250,12 +1578,30 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
     }
   }
 
+  // Save vcompaction pointers
+  for (int level = 0; level < compact_vpointers_.size(); level++) {
+    if (!compact_vpointers_[level].empty()) {
+      InternalKey key;
+      key.DecodeFrom(compact_vpointers_[level]);
+      edit.SetCompactVPointer(level, key);
+    }
+  }
+
   // Save files
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
       edit.AddFile(level, f->number, f->file_size, f->smallest, f->largest);
+    }
+  }
+
+  // Save vfiles
+  for (int level = 0; level < current_->vfiles_.size(); level++) {
+    const std::vector<FileMetaData*>& vfiles = current_->vfiles_[level];
+    for (size_t i = 0; i < vfiles.size(); i++) {
+      const FileMetaData* f = vfiles[i];
+      edit.AddVFile(level, f->number, f->file_size, f->smallest, f->largest);
     }
   }
 
@@ -1268,6 +1614,12 @@ int VersionSet::NumLevelFiles(int level) const {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return current_->files_[level].size();
+}
+
+int VersionSet::NumLevelVFiles(int level) const {
+  assert(level >= 0);
+  assert(level <= adgMod::MOD == 10 ? 2 : config::kNumLevels);
+  return current_->vfiles_[level].size();
 }
 
 const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
@@ -1320,6 +1672,19 @@ void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
       const std::vector<FileMetaData*>& files = v->files_[level];
       for (size_t i = 0; i < files.size(); i++) {
         live->insert(files[i]->number);
+      }
+    }
+  }
+}
+
+void VersionSet::AddLiveVFiles(std::set<uint64_t>* vlive) {
+  for (Version* v = dummy_versions_.next_; v != &dummy_versions_;
+       v = v->next_) {
+    int max_level = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    for (int level = 0; level < max_level; level++) {
+      const std::vector<FileMetaData*>& vfiles = v->vfiles_[level];
+      for (size_t i = 0; i < vfiles.size(); i++) {
+        vlive->insert(vfiles[i]->number);
       }
     }
   }
@@ -1416,6 +1781,41 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
+Iterator* VersionSet::MakeInputIteratorV2(Compaction* c) {
+  ReadOptions options;
+  options.verify_checksums = options_->paranoid_checks;
+  options.fill_cache = false;
+
+  std::unordered_map<uint64_t, Table*>& vtables = current_->vtables_;
+  const int space = c->vinputs_[0].size();
+  Iterator** list = new Iterator*[space];
+  int num = 0;
+  if (!c->vinputs_[0].empty()) {
+    const std::vector<FileMetaData*>& vfiles = c->vinputs_[0];
+    for (size_t i = 0; i < vfiles.size(); i++) {
+      Iterator* it = nullptr;
+      if (vtables.find(vfiles[i]->number) == vtables.end()) {
+        std::string vfname = VTableFileName(dbname_, vfiles[i]->number);
+        RandomAccessFile* vfile = nullptr;
+        Table* table = nullptr;
+        env_->NewRandomAccessFile(vfname, &vfile);
+        Table::Open(*options_, vfile, vfiles[i]->file_size, &table);
+        if (table) {
+          vtables[vfiles[i]->number] = table;
+          it = table->NewVIterator(options);
+        }
+      } else {
+        it = vtables[vfiles[i]->number]->NewVIterator(options);
+      }
+      list[num++] = it;
+    }
+  }
+  assert(num <= space);
+  Iterator* result = NewMergingIterator(&icmp_, list, num);
+  delete[] list;
+  return result;
+}
+
 Compaction* VersionSet::PickCompaction() {
   Compaction* c;
   int level;
@@ -1467,6 +1867,90 @@ Compaction* VersionSet::PickCompaction() {
 
   SetupOtherInputs(c);
 
+  return c;
+}
+
+Compaction* VersionSet::PickVCompaction() {
+  Compaction* c;
+  // const bool level_compaction = (Compaction::merge_num_ % adgMod::level_compaction_limit == 0);
+  const bool level_compaction = false;
+  int cur_small_file = 0;
+  for (int i = 0; i < current_->vfiles_[0].size(); i++) {
+    if (current_->vfiles_[0][i]->file_size < adgMod::max_merged_size) {
+      cur_small_file++;
+    }
+  }
+  const bool size_compaction = (cur_small_file >= adgMod::small_file_allowed);
+  if (level_compaction) {
+    c = new Compaction(options_, 0);
+    assert(current_->vfiles_[0].size() > 0);
+    const Comparator* vkcmp = VKeyComparator();
+    InternalKey smallest, largest;
+    smallest = current_->vfiles_[0][0]->smallest;
+    largest = current_->vfiles_[0][0]->largest;
+    for (size_t i = 0; i < current_->vfiles_[0].size(); ++i) {
+      FileMetaData* f = current_->vfiles_[0][i];
+      if (vkcmp->Compare(f->smallest, smallest) < 0) {
+        smallest = f->smallest;
+      }
+      if (vkcmp->Compare(f->largest, largest) > 0) {
+        largest = f->largest;
+      }
+      if (f->file_size < adgMod::max_merged_size) {
+        c->vinputs_[0].push_back(f);
+      }
+    }
+    for (size_t i = 0; i < current_->vfiles_[1].size(); ++i) {
+      FileMetaData* f = current_->vfiles_[1][i];
+      InternalKey start, end;
+      if (vkcmp->Compare(f->smallest, smallest) > 0) {
+        start = f->smallest;
+      } else {
+        start = smallest;
+      }
+      if (vkcmp->Compare(f->largest, largest) < 0) {
+        end = f->largest;
+      } else {
+        end = largest;
+      }
+      if (vkcmp->Compare(start, end) <= 0) {
+        c->vinputs_[1].push_back(f);
+      }
+    }
+    Compaction::merge_num_++;
+  } else if (size_compaction) {
+    c = new Compaction(options_, 0);
+    for (size_t i = 0; i < current_->vfiles_[0].size(); ++i) {
+      FileMetaData* f = current_->vfiles_[0][i];
+      if (f->file_size < adgMod::max_merged_size) {
+        c->vinputs_[0].push_back(f);
+      }
+    }
+    Compaction::merge_num_++;
+  } else {
+    std::vector<FileMetaData*> files_to_compact;
+    for (size_t i = 0; i < current_->vfiles_[0].size(); ++i) {
+      FileMetaData* f = current_->vfiles_[0][i];
+      uint64_t sz = adgMod::key_size + adgMod::value_size + 16;
+      if (100 * f->invalid_count / (f->file_size / sz) > adgMod::invalid_limit
+          && f->file_size < adgMod::max_merged_size) {
+        files_to_compact.push_back(f);
+      }
+    }
+    if (files_to_compact.size() > 1) {
+      c = new Compaction(options_, 0);
+      for (size_t i = 0; i < files_to_compact.size(); ++i) {
+        c->vinputs_[0].push_back(files_to_compact[i]);
+      }
+      Compaction::merge_num_++;
+    } else {
+      return nullptr;
+    }
+  }
+
+  c->input_version_ = current_;
+  c->input_version_->Ref();
+  
   return c;
 }
 
@@ -1679,6 +2163,25 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
   }
 }
 
+void Compaction::AddVInputDeletions(VersionEdit* edit) {
+  int cur_level = adgMod::MOD == 10 ? 0 : level_;
+  for (int which = 0; which < 2; which++) {
+    for (size_t i = 0; i < vinputs_[which].size(); i++) {
+      edit->DeleteVFile(cur_level + which, vinputs_[which][i]->number);
+    }
+  }
+}
+
+void Compaction::MoveToNextLevel(VersionEdit* edit) {
+  for (int which = 0; which < 2; which++) {
+    for (size_t i = 0; i < vinputs_[which].size(); i++) {
+      FileMetaData* vf = vinputs_[which][i];
+      edit->DeleteVFile(level_, vf->number);
+      edit->AddVFile(level_ + 1, vf->number, vf->file_size, vf->smallest, vf->largest);
+    }
+  }
+}
+
 bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
   // Maybe use binary search to find right entry instead of linear search?
   const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();
@@ -1733,19 +2236,48 @@ void Compaction::ReleaseInputs() {
 
 
 void Version::PrintAll() const {
-    for (int i = 1; i < config::kNumLevels; ++i) {
-        for (int j = 0; j < files_[i].size(); ++j) {
-            if (j == 0) printf("Level %d\n", i);
-            FileMetaData* file = files_[i][j];
-            string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
-            string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
-            printf("File %d in level %d:\n"
-                           "\tNumber: %lu\n"
-                           "\tSize: %lu\n"
-                           "\tNumEntries: %lu\n"
-                           "\tKey Range: %s to %s\n", j, i, file->number, file->file_size, 0,
-                           small_key.c_str(), large_key.c_str());
+    for (int i = 0; i < config::kNumLevels; ++i) {
+      for (int j = 0; j < files_[i].size(); ++j) {
+        if (j == 0) printf("Level %d\n", i);
+        FileMetaData* file = files_[i][j];
+        string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
+        string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+        printf("File %d in level %d:\n"
+                "\tNumber: %lu\n"
+                "\tSize: %lu\n"
+                "\tNumEntries: %lu\n"
+                "\tKey Range: %s to %s\n",
+                j, i, file->number, file->file_size, file->num_keys,
+                small_key.c_str(), large_key.c_str());
+      }
+    }
+
+    printf("\n");
+    int levels = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    for (int i = 0 ; i < levels; ++i) {
+      for (int j = 0; j < vfiles_[i].size(); ++j) {
+        if (j == 0) printf("Level %d\n", i);
+        FileMetaData* file = vfiles_[i][j];
+        string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
+        string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+        uint64_t small_vkey = 0, large_vkey = 0;
+        if (adgMod::MOD == 10) {
+          small_key = small_key.substr(0, small_key.size() - 8);
+          large_key = large_key.substr(0, large_key.size() - 8);
+          small_vkey = *reinterpret_cast<uint64_t*>(small_key.data() + small_key.size() - 8);
+          large_vkey = *reinterpret_cast<uint64_t*>(large_key.data() + large_key.size() - 8);
         }
+        printf("VFile %d in level %d:\n"
+                "\tNumber: %lu\n"
+                "\tSize: %lu\n"
+                "\tNumEntries: %lu\n"
+                "\tKey Range: %s to %s\n",
+                j, i, file->number, file->file_size, file->num_keys,
+                small_key.c_str(), large_key.c_str());
+        if (adgMod::MOD == 10) {
+          printf("\tVKey Range: %lu to %lu\n", small_vkey, large_vkey);
+        }
+      }
     }
 }
 

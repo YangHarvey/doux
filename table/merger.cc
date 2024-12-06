@@ -4,13 +4,21 @@
 
 #include "table/merger.h"
 
+
 #include "leveldb/comparator.h"
 #include "leveldb/iterator.h"
 #include "table/iterator_wrapper.h"
+#include "util/coding.h"
+#include "mod/util.h"
+#include "impl/zorder/aabb.h"
 
 namespace leveldb {
 
 namespace {
+
+// Which direction is the iterator moving?
+enum Direction { kForward, kReverse };
+
 class MergingIterator : public Iterator {
  public:
   MergingIterator(const Comparator* comparator, Iterator** children, int n)
@@ -129,8 +137,6 @@ class MergingIterator : public Iterator {
   }
 
  private:
-  // Which direction is the iterator moving?
-  enum Direction { kForward, kReverse };
 
   void FindSmallest();
   void FindLargest();
@@ -174,6 +180,191 @@ void MergingIterator::FindLargest() {
   }
   current_ = largest;
 }
+
+class VMergingIterator : public Iterator {
+ public:
+  VMergingIterator(const ReadOptions& options, const Comparator* comparator, Iterator** children, int n) 
+      : comparator_(comparator),
+        children_(new IteratorWrapper[n]),
+        n_(n),
+        current_(nullptr),
+        direction_(kForward),
+        pos_(0) {
+    for (int i = 0; i < n; i++) {
+      children_[i].Set(children[i]);
+    }
+
+    start_ = options.start1;
+    start_ = (start_ << 32) | options.start2;
+    end_ = options.end1;
+    end_ = (end_ << 32) | options.end2;
+
+    big_min_ = doux::MortonCode<2, 32>::Encode({options.start1, options.start2});
+    limit_max_ = doux::MortonCode<2, 32>::Encode({options.end1, options.end2});
+    doux::AABB<2, 32> aabb = {big_min_, limit_max_};
+    region_ = aabb.ToIntervals();
+    cur_vkey_ = new char[adgMod::key_size + 16];
+    cur_idx_.reserve(n);
+    for (int i = 0; i < n; i++) {
+      cur_idx_[i] = 0;
+    }
+  }
+
+  virtual ~VMergingIterator() { 
+    delete[] children_;
+    delete cur_vkey_;
+  }
+
+  virtual bool Valid() const { return (current_ != nullptr); }
+
+  virtual void SeekToFirst() {
+    for (int i = 0; i < n_; i++) {
+      children_[i].SeekToFirst();
+    }
+    current_ = &children_[0];
+    direction_ = kForward;
+  }
+
+  virtual void SeekToLast() {
+    for (int i = 0; i < n_; i++) {
+      children_[i].SeekToLast();
+    }
+    current_ = &children_[n_ - 1];
+    direction_ = kReverse;
+  }
+
+  virtual void Seek(const Slice& target) {
+    if (adgMod::MOD == 9) {
+      EncodeFixed64(cur_vkey_, 0);
+      EncodeFixed64(cur_vkey_ + 8, 0);
+      EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
+      EncodeFixed32(cur_vkey_ + 24, options_.start1);
+      EncodeFixed32(cur_vkey_ + 28, options_.start2);
+      Slice vkey(cur_vkey_, adgMod::key_size + 16);
+      for (int i = 0; i < n_; i++) {
+        children_[i].Seek(vkey);
+        if (children_[i].Valid()) {
+          children_[i].Next();
+        }
+      }
+    } else if (adgMod::MOD == 10) {
+      EncodeFixed64(cur_vkey_, 0);
+      EncodeFixed64(cur_vkey_ + 8, 0);
+      EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
+      for (int i = 0; i < n_; i++) {
+        EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[i]].start_);
+        Slice vkey(cur_vkey_, adgMod::key_size + 16);
+        children_[i].Seek(vkey);
+        if (children_[i].Valid()) {
+          children_[i].Next();
+        }
+      }
+    }
+
+    for (int i = 0; i < n_; i++) {
+      if (children_[i].Valid()) {
+        current_ = &children_[i];
+        pos_ = i;
+        break;
+      }
+    }
+    direction_ = kForward;
+  }
+
+  virtual void Next() {
+    assert(Valid());
+    current_->Next();
+    if (adgMod::MOD == 10) {
+      Slice cur_vkey = current_->key();
+      uint64_t cur_zorder = DecodeFixed64(cur_vkey.data() + adgMod::key_size + 8);
+      const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
+      if (!cur_interval.Contains(doux::MortonCode<2, 32>(cur_zorder))) {
+        while (pos_ < n_ && !JumpNext()) {
+          ++pos_;
+          current_ = &children_[pos_];
+        }
+      }
+    } else if (adgMod::MOD == 9) {
+      Slice cur_vkey = current_->key();
+      uint64_t cur_sort_key = DecodeFixed64(cur_vkey.data() + adgMod::key_size + 8);
+      if (cur_sort_key < start_ || cur_sort_key > end_) {
+        while (pos_ < n_ && !current_->Valid()) {
+          ++pos_;
+          current_ = &children_[pos_];
+        }
+      }
+    }
+  }
+
+  virtual void Prev() {
+    assert(Valid());
+    current_->Prev();
+    if (pos_ > 0 && !current_->Valid()) {
+      --pos_;
+      current_ = &children_[pos_];
+    }
+  }
+
+  virtual Slice key() const {
+    assert(Valid());
+    return current_->key();
+  }
+
+  virtual Slice value() const {
+    assert(Valid());
+    return current_->value();
+  }
+
+  virtual Status status() const {
+    Status status;
+    for (int i = 0; i < n_; i++) {
+      status = children_[i].status();
+      if (!status.ok()) {
+        break;
+      }
+    }
+    return status;
+  }
+
+ private:
+  bool JumpNext() {
+    EncodeFixed64(cur_vkey_, 0);
+    EncodeFixed64(cur_vkey_ + 8, 0);
+    EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
+    cur_idx_[pos_]++;
+    while (cur_idx_[pos_] < region_.intervals_.size()) {
+      const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
+      EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[pos_]].start_);
+      current_->Seek({cur_vkey_, static_cast<size_t>(adgMod::key_size + 16)});
+      if (current_->Valid()) {
+        current_->Next();
+        break;
+      }
+    }
+    if (!current_->Valid()) {
+      return false;
+    }
+    return true;
+  }
+
+ private:
+  ReadOptions options_;
+  const Comparator* comparator_;
+  IteratorWrapper* children_;
+  int n_;
+  IteratorWrapper* current_;
+  Direction direction_;
+  
+  int pos_;
+  uint64_t start_;
+  uint64_t end_;
+  doux::MortonCode<2, 32> big_min_;
+  doux::MortonCode<2, 32> limit_max_;
+  doux::Region<2, 32> region_;
+  char* cur_vkey_;
+  std::vector<int> cur_idx_;
+};
+
 }  // namespace
 
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
@@ -185,6 +376,18 @@ Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
     return children[0];
   } else {
     return new MergingIterator(comparator, children, n);
+  }
+}
+
+Iterator* NewVMergingIterator(const ReadOptions& options, const Comparator* comparator,
+                              Iterator** children, int n) {
+  assert(n >= 0);
+  if (n == 0) {
+    return NewEmptyIterator();
+  } else if (n == 1) {
+    return children[0];
+  } else {
+    return new VMergingIterator(options, comparator, children, n);
   }
 }
 

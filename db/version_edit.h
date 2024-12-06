@@ -5,13 +5,16 @@
 #ifndef STORAGE_LEVELDB_DB_VERSION_EDIT_H_
 #define STORAGE_LEVELDB_DB_VERSION_EDIT_H_
 
+#include <iostream>
 #include <set>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "db/dbformat.h"
 #include "mod/stats.h"
 #include "mod/learned_index.h"
+#include "impl/dependency.h"
 
 using std::vector;
 
@@ -20,7 +23,7 @@ namespace leveldb {
 class VersionSet;
 
 struct FileMetaData {
-  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), num_keys(0) {}
+  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), num_keys(0), invalid_count(0) {}
 
   int refs;
   int allowed_seeks;  // Seeks allowed until compaction
@@ -29,6 +32,7 @@ struct FileMetaData {
   InternalKey smallest;  // Smallest internal key served by table
   InternalKey largest;   // Largest internal key served by table
   int num_keys;
+  int invalid_count;
 };
 
 class VersionEdit {
@@ -61,6 +65,9 @@ class VersionEdit {
   void SetCompactPointer(int level, const InternalKey& key) {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
+  void SetCompactVPointer(int level, const InternalKey& key) {
+    compact_vpointers_.push_back(std::make_pair(level, key));
+  }
 
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
@@ -73,11 +80,30 @@ class VersionEdit {
     f.smallest = smallest;
     f.largest = largest;
     new_files_.push_back(std::make_pair(level, f));
+    // std::cout << "AddFile: {number: " << f.number << ", file_size: " << f.file_size << "}" << std::endl;
+  }
+
+  void AddVFile(int level, uint64_t file, uint64_t file_size,
+               const InternalKey& smallest, const InternalKey& largest) {
+    FileMetaData f;
+    f.number = file;
+    f.file_size = file_size;
+    f.smallest = smallest;
+    f.largest = largest;
+    new_vfiles_.push_back(std::make_pair(level, f));
   }
 
   // Delete the specified "file" from the specified "level".
   void DeleteFile(int level, uint64_t file) {
     deleted_files_.insert(std::make_pair(level, file));
+  }
+
+  void DeleteVFile(int level, uint64_t file) {
+    deleted_vfiles_.insert(std::make_pair(level, file));
+  }
+
+  void AddDependency(uint64_t parent, uint64_t child) {
+    dep_.SetParent(parent, child);
   }
 
   void EncodeTo(std::string* dst) const;
@@ -103,8 +129,12 @@ class VersionEdit {
   bool has_last_sequence_;
 
   std::vector<std::pair<int, InternalKey> > compact_pointers_;
+  std::vector<std::pair<int, InternalKey> > compact_vpointers_;
   DeletedFileSet deleted_files_;
+  DeletedFileSet deleted_vfiles_;
   std::vector<std::pair<int, FileMetaData> > new_files_;
+  std::vector<std::pair<int, FileMetaData> > new_vfiles_;
+  doux::Dependency dep_;
 };
 
 }  // namespace leveldb

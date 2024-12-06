@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <vector>
 
 #include "leveldb/export.h"
 #include "leveldb/iterator.h"
@@ -68,6 +69,9 @@ class LEVELDB_EXPORT DB {
   // Note: consider setting options.sync = true.
   virtual Status Put(const WriteOptions& options, const Slice& key,
                      const Slice& value) = 0;
+                    
+  virtual Status sPut(const WriteOptions& options, const Slice& key, const Slice &skey,
+                     const std::string& value) = 0;
 
   // Remove the database entry (if any) for "key".  Returns OK on
   // success, and a non-OK status on error.  It is not an error if "key"
@@ -89,6 +93,15 @@ class LEVELDB_EXPORT DB {
   // May return some other Status on an error.
   virtual Status Get(const ReadOptions& options, const Slice& key,
                      std::string* value) = 0;
+  virtual Status PreGet(const ReadOptions& options, const Slice& key,
+                        std::string* value) = 0;
+
+  virtual void runAllColocationGC() = 0;
+
+  virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value) = 0;
+  
+  virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
+                    uint64_t length_range, std::vector<std::string>& res) {};
 
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must
@@ -97,6 +110,7 @@ class LEVELDB_EXPORT DB {
   // Caller should delete the iterator when it is no longer needed.
   // The returned iterator should be deleted before this db is deleted.
   virtual Iterator* NewIterator(const ReadOptions& options) = 0;
+  virtual Iterator* NewVIterator(const ReadOptions& options) { return nullptr; };
 
   // Return a handle to the current DB state.  Iterators created with
   // this handle will all observe a stable snapshot of the current DB

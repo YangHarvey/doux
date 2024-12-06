@@ -1,0 +1,16 @@
+.vscode/
+build/
+evaluation/
+eval/
+eval_micro/
+eval_ycsb/
+eval_ycsb_1/
+eval_tpch/
+eval_tpch_1/
+tpch_leveldb/
+tpch_diffkv/
+tpch_wisckey/
+ycsb/
+tpch/
+microbenchmark/
+mircobenchmark/

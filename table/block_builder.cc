@@ -40,7 +40,7 @@
 namespace leveldb {
 
 BlockBuilder::BlockBuilder(const Options* options)
-    : options_(options), restarts_(), counter_(0), finished_(false) {
+    : options_(options), restarts_(), counter_(0), num_entries_(0), finished_(false) {
   assert(options->block_restart_interval >= 1);
   restarts_.push_back(0);  // First restart point is at offset 0
 }
@@ -50,6 +50,7 @@ void BlockBuilder::Reset() {
   restarts_.clear();
   restarts_.push_back(0);  // First restart point is at offset 0
   counter_ = 0;
+  num_entries_ = 0;
   finished_ = false;
   last_key_.clear();
 }
@@ -59,6 +60,8 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
           restarts_.size() * sizeof(uint32_t) +  // Restart array
           sizeof(uint32_t));                     // Restart array length
 }
+
+uint32_t BlockBuilder::BlockOffset() const { return num_entries_; }
 
 Slice BlockBuilder::Finish() {
   // Append restart array
@@ -106,6 +109,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   last_key_.append(key.data() + shared, non_shared);
   assert(Slice(last_key_) == key);
   counter_++;
+  num_entries_++;
 }
 
 }  // namespace leveldb

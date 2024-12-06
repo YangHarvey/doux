@@ -1,12 +1,9 @@
-//
-// Created by daiyi on 2019/09/30.
-//
-
 #ifndef LEVELDB_STATS_H
 #define LEVELDB_STATS_H
 
 
 #include <cstdint>
+#include <string>
 #include <map>
 #include <vector>
 #include <cstring>

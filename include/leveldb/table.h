@@ -11,6 +11,7 @@
 
 #include "leveldb/export.h"
 #include "leveldb/iterator.h"
+#include "leveldb/comparator.h"
 
 namespace leveldb {
 
@@ -53,6 +54,9 @@ class LEVELDB_EXPORT Table {
   // call one of the Seek methods on the iterator before using it).
   Iterator* NewIterator(const ReadOptions&, int file_num = 0, RandomAccessFile* file = nullptr) const;
 
+  Iterator* NewVIterator(const ReadOptions&) const;
+
+
   // Given a key, return an approximate byte offset in the file where
   // the data for that key begins (or would begin if the key were
   // present in the file).  The returned value is in terms of file
@@ -63,36 +67,44 @@ class LEVELDB_EXPORT Table {
 
   static Iterator* BlockReader(void*, const ReadOptions&, const Slice&);
 
+  static Iterator* VBlockReader(void*, const ReadOptions&, const Slice&);
+
  private:
   friend class TableCache;
   friend class LearnedIterator;
 
+  struct Rep {
+    ~Rep();
 
-    struct Rep {
+    Options options;
+    Status status;
+    RandomAccessFile* file;
+    uint64_t cache_id;
+    FilterBlockReader* filter;
+    const char* filter_data;
 
-        ~Rep();
-
-        Options options;
-        Status status;
-        RandomAccessFile* file;
-        uint64_t cache_id;
-        FilterBlockReader* filter;
-        const char* filter_data;
-
-        BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
-        Block* index_block;
-    };
+    BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
+    Block* index_block;
+  };
   
 
   explicit Table(Rep* rep) : rep_(rep) {}
 
+public:
   // Calls (*handle_result)(arg, ...) with the entry found after a call
   // to Seek(key).  May not make such a call if filter policy says
   // that key is not present.
   Status InternalGet(const ReadOptions&, const Slice& key, void* arg,
                      void (*handle_result)(void* arg, const Slice& k, const Slice& v), int level,
                      FileMetaData* meta = nullptr, uint64_t lower = 0, uint64_t upper = 0, bool learned = false, Version* version = nullptr);
+  Status InternalVGet(const ReadOptions&, const Slice& key, void* arg,
+                      void (*handle_result)(void* arg, const Slice& k, const Slice& v),
+                      uint32_t block_number, uint32_t block_offset);
+  Status MergedVGet(const ReadOptions&, const Slice& key, void* arg,
+                    void (*handle_result)(void* arg, const Slice& k, const Slice& v),
+                    uint32_t block_number, uint32_t block_offset);
 
+private:
   void ReadMeta(const Footer& footer);
   void ReadFilter(const Slice& filter_handle_value);
 

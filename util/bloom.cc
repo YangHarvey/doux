@@ -80,7 +80,7 @@ class BloomFilterPolicy : public FilterPolicy {
   }
 
  private:
-  size_t bits_per_key_;
+size_t bits_per_key_;
   size_t k_;
 };
 }  // namespace

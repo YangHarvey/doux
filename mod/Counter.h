@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/02/12.
-//
-
 #ifndef PROJECT1_COUNTER_H
 #define PROJECT1_COUNTER_H
 

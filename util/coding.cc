@@ -4,6 +4,8 @@
 
 #include "util/coding.h"
 
+#include <iostream>
+
 namespace leveldb {
 
 void EncodeFixed32(char* dst, uint32_t value) {
@@ -15,6 +17,13 @@ void EncodeFixed32(char* dst, uint32_t value) {
     dst[2] = (value >> 16) & 0xff;
     dst[3] = (value >> 24) & 0xff;
   }
+}
+
+void EncodeBigEndianFixed32(char *dst, uint32_t value) {
+  dst[0] = (value >> 24) & 0xFF;  // 最高有效字节
+  dst[1] = (value >> 16) & 0xFF;
+  dst[2] = (value >> 8) & 0xFF;
+  dst[3] = value & 0xFF;         
 }
 
 void EncodeFixed64(char* dst, uint64_t value) {
@@ -32,9 +41,26 @@ void EncodeFixed64(char* dst, uint64_t value) {
   }
 }
 
+void EncodeBigEndianFixed64(char *dst, uint64_t value) {
+  dst[0] = (value >> 56) & 0xFF;  // 最高有效字节
+  dst[1] = (value >> 48) & 0xFF;
+  dst[2] = (value >> 40) & 0xFF;
+  dst[3] = (value >> 32) & 0xFF;
+  dst[4] = (value >> 24) & 0xFF;
+  dst[5] = (value >> 16) & 0xFF;
+  dst[6] = (value >> 8) & 0xFF;
+  dst[7] = value & 0xFF;           // 最低有效字节 
+}
+
 void PutFixed32(std::string* dst, uint32_t value) {
   char buf[sizeof(value)];
   EncodeFixed32(buf, value);
+  dst->append(buf, sizeof(buf));
+}
+
+void PutBigEndianFixed32(std::string* dst, uint32_t value) {
+  char buf[sizeof(value)];
+  EncodeBigEndianFixed32(buf, value);
   dst->append(buf, sizeof(buf));
 }
 

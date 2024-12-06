@@ -81,7 +81,7 @@ struct LEVELDB_EXPORT Options {
   // so you may wish to adjust this parameter to control memory usage.
   // Also, a larger write buffer will result in a longer recovery time
   // the next time the database is opened.
-  size_t write_buffer_size = 4 * 1024 * 1024;
+  size_t write_buffer_size = 64 * 1024 * 1024;
 
   // Number of open files that can be used by the DB.  You may need to
   // increase this if your database has a large working set (budget
@@ -99,7 +99,7 @@ struct LEVELDB_EXPORT Options {
   // block size specified here corresponds to uncompressed data.  The
   // actual size of the unit read from disk may be smaller if
   // compression is enabled.  This parameter can be changed dynamically.
-  size_t block_size = 1024 * 4;
+  size_t block_size = 1024 * 64;
 
   // Number of keys between restart points for delta encoding of keys.
   // This parameter can be changed dynamically.  Most clients should
@@ -114,7 +114,7 @@ struct LEVELDB_EXPORT Options {
   // compactions and hence longer latency/performance hiccups.
   // Another reason to increase this parameter might be when you are
   // initially populating a large database.
-  size_t max_file_size = 2 * 1024 * 1024;
+  size_t max_file_size = 16 * 1024 * 1024;
 
   // Compress blocks using the specified compression algorithm.  This
   // parameter can be changed dynamically.
@@ -161,6 +161,11 @@ struct LEVELDB_EXPORT ReadOptions {
   // not have been released).  If "snapshot" is null, use an implicit
   // snapshot of the state at the beginning of this read operation.
   const Snapshot* snapshot = nullptr;
+
+  uint32_t start1 = 0, end1 = -1;
+  uint32_t start2 = 0, end2 = -1; 
+
+  uint64_t start = 0, end = -1;
 };
 
 // Options that control write operations

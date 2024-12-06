@@ -22,6 +22,7 @@ namespace leveldb {
 
 // Standard Put... routines append to a string
 void PutFixed32(std::string* dst, uint32_t value);
+void PutBigEndianFixed32(std::string* dst, uint32_t value);
 void PutFixed64(std::string* dst, uint64_t value);
 void PutVarint32(std::string* dst, uint32_t value);
 void PutVarint64(std::string* dst, uint64_t value);
@@ -71,6 +72,13 @@ inline uint32_t DecodeFixed32(const char* ptr) {
   }
 }
 
+inline uint32_t DecodeBigEndianFixed32(const char* ptr) {
+  return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[0])) << 24) |
+          (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 16) |
+          (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 8) |
+          static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])));
+}
+
 inline uint64_t DecodeFixed64(const char* ptr) {
   if (port::kLittleEndian) {
     // Load the raw bytes
@@ -83,6 +91,18 @@ inline uint64_t DecodeFixed64(const char* ptr) {
     return (hi << 32) | lo;
   }
 }
+
+inline uint64_t DecodeBigEndianFixed64(const char* ptr) {
+  return ((static_cast<uint64_t>(static_cast<unsigned char>(ptr[0])) << 56) |
+          (static_cast<uint64_t>(static_cast<unsigned char>(ptr[1])) << 48) |
+          (static_cast<uint64_t>(static_cast<unsigned char>(ptr[2])) << 40) |
+          (static_cast<uint64_t>(static_cast<unsigned char>(ptr[3])) << 32) |
+          (static_cast<uint64_t>(static_cast<unsigned char>(ptr[4])) << 24) |
+          (static_cast<uint64_t>(static_cast<unsigned char>(ptr[5])) << 16) |
+          (static_cast<uint64_t>(static_cast<unsigned char>(ptr[6])) << 8) |
+          static_cast<uint64_t>(static_cast<unsigned char>(ptr[7])));
+}
+
 
 // Internal routine for use by fallback path of GetVarint32Ptr
 const char* GetVarint32PtrFallback(const char* p, const char* limit,

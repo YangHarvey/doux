@@ -11,8 +11,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED OFF)
 set(CMAKE_C_EXTENSIONS OFF)
 
-# This project requires C++11.
-set(CMAKE_CXX_STANDARD 11)
+# This project requires C++17.
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -206,14 +206,23 @@ target_sources(leveldb
     "${PROJECT_SOURCE_DIR}/mod/util.h"
     "${PROJECT_SOURCE_DIR}/mod/Vlog.cpp"
     "${PROJECT_SOURCE_DIR}/mod/Vlog.h"
-        "${PROJECT_SOURCE_DIR}/mod/Counter.cpp"
-        "${PROJECT_SOURCE_DIR}/mod/Counter.h"
-        "${PROJECT_SOURCE_DIR}/mod/timer.cpp"
-        "${PROJECT_SOURCE_DIR}/mod/timer.h"
-        "${PROJECT_SOURCE_DIR}/mod/event.cpp"
-        "${PROJECT_SOURCE_DIR}/mod/event.h"
-        "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.cpp"
-        "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.h"
+    "${PROJECT_SOURCE_DIR}/mod/GroupedValueLog.cpp"
+    "${PROJECT_SOURCE_DIR}/mod/GroupedValueLog.h"
+    "${PROJECT_SOURCE_DIR}/mod/Counter.cpp"
+    "${PROJECT_SOURCE_DIR}/mod/Counter.h"
+    "${PROJECT_SOURCE_DIR}/mod/timer.cpp"
+    "${PROJECT_SOURCE_DIR}/mod/timer.h"
+    "${PROJECT_SOURCE_DIR}/mod/event.cpp"
+    "${PROJECT_SOURCE_DIR}/mod/event.h"
+    "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.cpp"
+    "${PROJECT_SOURCE_DIR}/mod/CBMode_Learn.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/util.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/encoding.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/interval.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/region.h"
+    "${PROJECT_SOURCE_DIR}/impl/zorder/aabb.h"
+    "${PROJECT_SOURCE_DIR}/impl/dependency.h"
+    "${PROJECT_SOURCE_DIR}/impl/zipfian.h"
 
   # Only CMake 3.3+ supports PUBLIC sources in targets exported by "install".
   $<$<VERSION_GREATER:CMAKE_VERSION,3.2>:PUBLIC>
@@ -385,6 +394,12 @@ if(LEVELDB_BUILD_TESTS)
     leveldb_test("${PROJECT_SOURCE_DIR}/util/logging_test.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/mod/read.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/mod/read_cold.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench_2.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_2.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_3.cc")
+
 
     # TODO(costan): This test also uses
     #               "${PROJECT_SOURCE_DIR}/util/env_{posix|windows}_test_helper.h"

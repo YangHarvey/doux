@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/02/02.
-//
-
 #include <cstdint>
 #include <cassert>
 #include <utility>

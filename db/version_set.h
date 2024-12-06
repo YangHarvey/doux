@@ -18,11 +18,17 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "db/dbformat.h"
 #include "db/version_edit.h"
+#include "db/builder.h"
+#include "leveldb/table.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
+#include "impl/zorder/encoding.h"
+#include "impl/dependency.h"
 
 namespace leveldb {
 
@@ -57,24 +63,51 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
+enum SaverState {
+  kNotFound,
+  kFound,
+  kDeleted,
+  kCorrupt,
+};
+
+struct Saver {
+  SaverState state;
+  const Comparator* ucmp;
+  Slice user_key;
+  std::string* value;
+};
+
+struct GetStats {
+  FileMetaData* seek_file;
+  int seek_file_level;
+};
+
 class Version {
  public:
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
-  struct GetStats {
-    FileMetaData* seek_file;
-    int seek_file_level;
-  };
 
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
+  void AddVIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
+  Status Scan(const ReadOptions&, const LookupKey& key, vector<std::string>& res,
+              GetStats* stats);
 
+  Status GetFromVFile(const ReadOptions&, const LookupKey& key, std::string* val,
+                      uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                      uint32_t block_offset, GetStats* stats);
+  
+  Status GetFromMergedVFile(const ReadOptions&, const LookupKey& key, std::string* val,
+                            uint64_t file_number, uint64_t file_size, uint32_t block_number,
+                            uint32_t block_offset, GetStats* stats);
+
+  
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
@@ -96,6 +129,7 @@ class Version {
       const InternalKey* begin,  // nullptr means before all keys
       const InternalKey* end,    // nullptr means after all keys
       std::vector<FileMetaData*>* inputs);
+  
 
   // Returns true iff some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].
@@ -108,6 +142,14 @@ class Version {
   // result that covers the range [smallest_user_key,largest_user_key].
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
+
+  void SetVInput(int which,
+                 std::vector<FileMetaData*>* inputs, 
+                 std::vector<FileMetaData*>* vinputs);
+  
+  void SetVInputV2(int which,
+                   const std::unordered_set<uint32_t>& vfiles,
+                   std::vector<FileMetaData*>* vinputs);
 
   int NumFiles(int level) const { return files_[level].size(); }
 
@@ -138,9 +180,12 @@ class Version {
         file_to_compact_level_(-1),
         compaction_score_(-1),
         compaction_level_(-1) {
-            for (int i = 0; i < config::kNumLevels; ++i)
-                learned_index_data_.push_back(std::make_shared<adgMod::LearnedIndexData>(adgMod::level_allowed_seek));
-        }
+    for (int i = 0; i < config::kNumLevels; ++i) {
+      learned_index_data_.push_back(std::make_shared<adgMod::LearnedIndexData>(adgMod::level_allowed_seek));
+    }
+    size_t sz = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    vfiles_.resize(sz);
+  }
 
   Version(const Version&) = delete;
   Version& operator=(const Version&) = delete;
@@ -164,6 +209,7 @@ class Version {
 
   // List of files per level
   std::vector<FileMetaData*> files_[config::kNumLevels];
+  std::vector<std::vector<FileMetaData*>> vfiles_;
 
   // Next file to compact based on seek stats.
   FileMetaData* file_to_compact_;
@@ -178,6 +224,9 @@ class Version {
 public:
   std::vector<std::shared_ptr<adgMod::LearnedIndexData>> learned_index_data_;
   std::map<int, std::shared_ptr<adgMod::LearnedIndexData>> file_learned_index_data_;
+  std::unordered_map<uint64_t, Table*> vtables_;
+  std::unordered_map<uint64_t, FileMetaData*> vfile_map_;
+  doux::Dependency dep_;
 };
 
 class VersionSet {
@@ -222,6 +271,7 @@ class VersionSet {
 
   // Return the number of Table files at the specified level.
   int NumLevelFiles(int level) const;
+  int NumLevelVFiles(int level) const;
 
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
@@ -250,6 +300,7 @@ class VersionSet {
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the compaction.  Caller should delete the result.
   Compaction* PickCompaction();
+  Compaction* PickVCompaction();
 
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns nullptr if there is nothing in that
@@ -266,6 +317,8 @@ class VersionSet {
   // The caller should delete the iterator when no longer needed.
   Iterator* MakeInputIterator(Compaction* c);
 
+  Iterator* MakeInputIteratorV2(Compaction* c);
+
   // Returns true iff some level needs a compaction.
   bool NeedsCompaction() const {
     Version* v = current_;
@@ -275,6 +328,7 @@ class VersionSet {
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
   void AddLiveFiles(std::set<uint64_t>* live);
+  void AddLiveVFiles(std::set<uint64_t>* vlive);
 
   // Return the approximate offset in the database of the data for
   // "key" as of version "v".
@@ -291,7 +345,7 @@ class VersionSet {
   static bool IsFound(void* arg);
 
 
- private:
+ public:
   class Builder;
   friend class adgMod::LearnedIndexData;
 
@@ -336,6 +390,8 @@ class VersionSet {
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
+  std::vector<std::string> compact_vpointers_;
+  char default_value_[sizeof(uint32_t) * 3];
 };
 
 // A Compaction encapsulates information about a compaction.
@@ -353,12 +409,31 @@ class Compaction {
 
   // "which" must be either 0 or 1
   int num_input_files(int which) const { return inputs_[which].size(); }
+  int num_input_vfiles(int which) const { return vinputs_[which].size(); }
 
   // Return the ith input file at "level()+which" ("which" must be 0 or 1).
   FileMetaData* input(int which, int i) const { return inputs_[which][i]; }
+  FileMetaData* vinput(int which, int i) const { return vinputs_[which][i]; }
+
 
   // Maximum size of files to build during this compaction.
-  uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
+  uint64_t MaxOutputFileSize() const {
+    // if (adgMod::MOD >= 8) {
+    //   return (adgMod::key_size + 12) * max_output_file_size_ / (adgMod::key_size + adgMod::value_size);
+    // } else {
+    //   return max_output_file_size_;
+    // }
+    return max_output_file_size_;
+  }
+
+  uint64_t MaxValueOutputFileSize() const {
+    // uint64_t kv_size = adgMod::key_size + sizeof(uint64_t) 
+    //                  + 4 * sizeof(uint32_t);
+    // uint64_t value_size = adgMod::key_size + sizeof(uint64_t) 
+    //                     + adgMod::value_size;
+    // return (max_output_file_size_ / kv_size) * value_size;
+    return max_output_file_size_;
+  }
 
   // Is this a trivial compaction that can be implemented by just
   // moving a single input file to the next level (no merging or splitting)
@@ -366,6 +441,10 @@ class Compaction {
 
   // Add all inputs to this compaction as delete operations to *edit.
   void AddInputDeletions(VersionEdit* edit);
+
+  void AddVInputDeletions(VersionEdit* edit);
+
+  void MoveToNextLevel(VersionEdit* edit);
 
   // Returns true if the information we have available guarantees that
   // the compaction is producing data in "level+1" for which no data exists
@@ -391,9 +470,20 @@ class Compaction {
   Version* input_version_;
   VersionEdit edit_;
 
+ public:
+  static uint64_t merge_num_;
+
   // Each compaction reads inputs from "level_" and "level_+1"
   std::vector<FileMetaData*> inputs_[2];  // The two sets of inputs
+  std::vector<FileMetaData*> vinputs_[2];
+  
+  std::unordered_map<Slice, size_t, HashSliceV2> key_idx_;
+  std::vector<std::pair<Slice, VInfo>> pending_kvs_;
 
+  std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>, HashSliceV2> key_map_;
+  std::vector<std::pair<Slice, Slice>> kvs_;
+
+ private:
   // State used to check for number of overlapping grandparent files
   // (parent == level_ + 1, grandparent == level_ + 2)
   std::vector<FileMetaData*> grandparents_;

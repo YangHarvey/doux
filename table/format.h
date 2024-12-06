@@ -5,6 +5,7 @@
 #ifndef STORAGE_LEVELDB_TABLE_FORMAT_H_
 #define STORAGE_LEVELDB_TABLE_FORMAT_H_
 
+#include <iostream>
 #include <stdint.h>
 
 #include <string>

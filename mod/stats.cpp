@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2019/09/30.
-//
-
 #include <cassert>
 #include "stats.h"
 #include <cmath>

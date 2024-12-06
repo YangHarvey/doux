@@ -45,47 +45,6 @@ TableCache::~TableCache() { delete cache_; }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
-
-//  adgMod::Stats* instance = adgMod::Stats::GetInstance();
-//
-//
-//  Status s;
-//  char buf[sizeof(file_number)];
-//  EncodeFixed64(buf, file_number);
-//  Slice key(buf, sizeof(buf));
-//  Cache::Handle* cache_handle = cache_->Lookup(key);
-//  TableAndFile* tf = cache_handle != nullptr ? reinterpret_cast<TableAndFile*>(cache_->Value(cache_handle)) : new TableAndFile;
-//
-//  if (cache_handle == nullptr) {
-//      std::string fname = TableFileName(dbname_, file_number);
-//
-//      s = env_->NewRandomAccessFile(fname, &tf->file);
-//      if (!s.ok()) {
-//          std::string old_fname = SSTTableFileName(dbname_, file_number);
-//          if (env_->NewRandomAccessFile(old_fname, &tf->file).ok()) {
-//              s = Status::OK();
-//          }
-//      }
-//  }
-//
-//  if (cache_handle == nullptr || tf->table == nullptr) {
-//      if (s.ok()) {
-//          s = Table::Open(options_, tf->file, file_size, &tf->table);
-//      }
-//  }
-//
-//  if (cache_handle == nullptr) {
-//      if (s.ok()) {
-//          cache_handle = cache_->Insert(key, tf, 1, DeleteEntry);
-//      } else {
-//          assert(tf->table == nullptr);
-//          delete tf->file;
-//      }
-//  }
-//
-//  *handle = cache_handle;
-//  return s;
-
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
@@ -94,7 +53,6 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 
 
   if (*handle == nullptr) {
-
     std::string fname = TableFileName(dbname_, file_number);
     RandomAccessFile* file = nullptr;
     Table* table = nullptr;

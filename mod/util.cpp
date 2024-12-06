@@ -1,7 +1,3 @@
-//
-// Created by daiyi on 2020/02/02.
-//
-
 #include <util/mutexlock.h>
 #include "util.h"
 #include "learned_index.h"
@@ -11,7 +7,18 @@ using std::to_string;
 
 namespace adgMod {
 
-    int MOD = 5;
+    int MOD = 0;
+    bool use_secondary_index = false;
+
+    bool use_dropmap = false;
+    bool if_decoupled_compaction = true;
+
+    uint32_t drop_count_gain = 0; 
+    uint32_t drop_map_size = 0;
+
+    uint32_t redirect_count = 0;
+    uint32_t direct_count = 0;
+
     bool string_mode = true;
     uint64_t key_multiple = 1;
     uint32_t model_error = 10;
@@ -20,13 +27,16 @@ namespace adgMod {
     uint32_t test_num_file_segments = 100;
     int key_size;
     int value_size;
+
+    leveldb::Slice sidx_perfix = "sidx_";
+
     leveldb::Env* env;
     leveldb::DBImpl* db;
     leveldb::ReadOptions read_options;
     leveldb::WriteOptions write_options;
     FileLearnedIndexData* file_data = nullptr;
     CBModel_Learn* learn_cb_model = nullptr;
-    uint64_t fd_limit;
+    uint64_t fd_limit = 1024;
     bool use_filter = false;
     bool restart_read = false;
     bool fresh_write = false;
@@ -38,23 +48,32 @@ namespace adgMod {
 
     int file_allowed_seek = 10;
     int level_allowed_seek = 1;
-    float reference_frequency = 2.6;
-    bool block_num_entries_recorded = false;
+    float reference_frequency = 2.5;
+    bool block_num_entries_recorded = true;
     bool level_learning_enabled = false;
-    bool file_learning_enabled = true;
-    bool load_level_model = true;
-    bool load_file_model = true;
+    bool file_learning_enabled = false;
+    bool load_level_model = false;
+    bool load_file_model = false;
     uint64_t block_num_entries = 0;
     uint64_t block_size = 0;
     uint64_t entry_size = 0;
+    uint64_t max_merged_size = 128 * 1024 * 1024;
+    uint64_t small_file_allowed = 128;
+    uint64_t level_compaction_limit = 100;
+    uint64_t invalid_limit = 10;
 
-
+    vector<string> keys;
+    vector<int> put_idx;
+    int cur_progress = 0;
+    int last_progress = 0;
     vector<Counter> levelled_counters(12);
     vector<vector<Event*>> events(3);
     leveldb::port::Mutex compaction_counter_mutex;
     leveldb::port::Mutex learn_counter_mutex;
     leveldb::port::Mutex file_stats_mutex;
     map<int, FileStats> file_stats;
+    leveldb::port::Mutex vfile_stats_mutex;
+    map<int, FileStats> vfile_stats;
 
     uint64_t ExtractInteger(const char* pos, size_t size) {
         char* temp = new char[size + 1];
@@ -87,6 +106,16 @@ namespace adgMod {
     string generate_value(uint64_t value) {
         string value_string = to_string(value);
         string result = string(value_size - value_string.length(), '0') + value_string;
+        return std::move(result);
+    }
+
+    string fill_key(const string& key, size_t sz) {
+        string result = string(sz - key.length(), '0') + key;
+        return std::move(result);
+    }
+
+    string fill_value(const string& value, size_t sz) {
+        string result = string(sz - value.length(), '0') + value;
         return std::move(result);
     }
 

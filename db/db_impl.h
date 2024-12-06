@@ -5,19 +5,26 @@
 #ifndef STORAGE_LEVELDB_DB_DB_IMPL_H_
 #define STORAGE_LEVELDB_DB_DB_IMPL_H_
 
+#include <iostream>
 #include <atomic>
 #include <deque>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <mod/Vlog.h>
+#include <mutex>
 
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
+#include "db/builder.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
+#include "impl/dependency.h"
+#include "mod/GroupedValueLog.h"
 
 namespace leveldb {
 
@@ -42,12 +49,24 @@ class DBImpl : public DB {
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options, const Slice& key,
                      std::string* value);
+  virtual Status PreGet(const ReadOptions& options, const Slice& key, 
+                        std::string* value);
+  virtual void Scan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
+                    uint64_t length_range, std::vector<std::string>& res);
   virtual Iterator* NewIterator(const ReadOptions&);
+  virtual Iterator* NewVIterator(const ReadOptions&);
   virtual const Snapshot* GetSnapshot();
   virtual void ReleaseSnapshot(const Snapshot* snapshot);
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
+
+  // with secondary index
+  virtual Status sPut(const WriteOptions& options, const Slice& key, const Slice &skey, const std::string& value);
+  virtual void GroupVGet(uint32_t group_index, uint64_t vaddr, uint32_t size, std::string* value);
+  virtual void runAllColocationGC();
+  // virtual Status sScan(const ReadOptions& options, const Slice& key, const std::vector<std::string>& values,
+  //                   uint64_t length_range, std::vector<std::string>& res);
 
   // Extra methods (for testing) that are not in the public DB interface
 
@@ -80,9 +99,13 @@ class DBImpl : public DB {
   void WaitForBackground();
   std::atomic<int> version_count;
   adgMod::VLog* vlog;
+  adgMod::VLog* cold_vlog;
 
+  // RISE
+  adgMod::GroupValueLog *grouped_vlog;
 
-
+  // dropmap
+  // std::unordered_set<leveldb::Slice> drop_map;
 
 private:
   friend class DB;
@@ -118,6 +141,9 @@ private:
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot,
                                 uint32_t* seed);
+  Iterator* NewVInternalIterator(const ReadOptions&,
+                                 SequenceNumber* latest_snapshot,
+                                 uint32_t* seed);            
 
   Status NewDB();
 
@@ -154,15 +180,25 @@ private:
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-    void BackgroundCall();
+  void BackgroundCall();
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void ReclaimVLog();
+  void RunCoLocationGC();
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void CleanupVCompaction(CompactionState* compact)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  inline Slice ConstructSlice(const Slice& from, Arena* arena);
   Status DoCompactionWork(CompactionState* compact)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  Status DoVCompactionWork(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
+  Status OpenCompactionVOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
+  Status FinishCompactionVOutputFile(CompactionState* compact, Iterator* input);
+  Status FinishCompactionVOutputFile(CompactionState* compact);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -187,6 +223,7 @@ private:
 
   // State below is protected by mutex_
   port::Mutex mutex_;
+  std::mutex gc_mutex;
   std::atomic<bool> shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   MemTable* mem_;
@@ -206,13 +243,16 @@ private:
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_ GUARDED_BY(mutex_);
+  std::set<uint64_t> pending_voutputs_ GUARDED_BY(mutex_);
 
   // Has a background compaction been scheduled or is running?
   bool background_compaction_scheduled_ GUARDED_BY(mutex_);
 
   ManualCompaction* manual_compaction_ GUARDED_BY(mutex_);
+  
 public:
   VersionSet* const versions_;
+
 private:
 
   // Have we encountered a background error in paranoid mode?
