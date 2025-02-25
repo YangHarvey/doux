@@ -7,6 +7,9 @@ cmake ../../doux -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON
 make -j
 
 doux_dir=/projects/doux/ycsb/doux_dir
+doux_0_dir=/projects/doux/ycsb/doux_0_dir
+doux_a_dir=/projects/doux/ycsb/doux_a_dir
+doux_b_dir=/projects/doux/ycsb/doux_b_dir
 
 doux_a_output=/projects/doux/ycsb/doux_a_output
 doux_b_output=/projects/doux/ycsb/doux_b_output
@@ -18,13 +21,14 @@ mkdir -p ${doux_output}
 mkdir -p ${doux_a_output}
 mkdir -p ${doux_b_output}
 mkdir -p ${doux_0_output}
+mkdir -p ${doux_0_dir}
 
 # Doux-0
 # Insert
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_0_output}/insert_init.txt
+# ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=false -e 100862 -d ${doux_0_dir} -m 10 -t 3 > ${doux_0_output}/insert_init.txt
 # sleep 10
-# ./ycsb_bench_2 -k 16 -v 1024 -c -w 0 --use_dropmap=false --decoupled_compaction=false -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_0_output}/insert.txt
-# Update
+# ./ycsb_bench_2 -k 16 -v 1024 -c -w 0 --use_dropmap=false --decoupled_compaction=false -e 100862 -n 10082 -d ${doux_0_dir} -m 10 -t 3 > ${doux_0_output}/insert.txt
+# # Update
 # ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_0_output}/update_init.txt
 # sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 1 --use_dropmap=false --decoupled_compaction=false -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_0_output}/update.txt
@@ -38,31 +42,31 @@ mkdir -p ${doux_0_output}
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 3 --use_dropmap=false --decoupled_compaction=false -e 10082 -n 10 -d ${doux_dir} -m 10 -t 3 > ${doux_0_output}/scan.txt
 
 
-# Doux-A
-# Insert
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/insert_init.txt
-# sleep 10
-# ./ycsb_bench_2 -k 16 -v 1024 -c -w 0 --use_dropmap=false --decoupled_compaction=true -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/insert.txt
-# # Update
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/update_init.txt
-# sleep 10
-# ./ycsb_bench_2 -k 16 -v 1024 -c -w 1 --use_dropmap=false --decoupled_compaction=true -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/update.txt
-# Get
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/get_init.txt
-# sleep 10
+# # Doux-A
+# # Insert
+./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 100862 -d ${doux_a_dir}_insert -m 10 -t 3 > ${doux_a_output}/insert_init.txt
+sleep 10
+./ycsb_bench_2 -k 16 -v 1024 -c -w 0 --use_dropmap=false --decoupled_compaction=true -e 100862 -n 100862 -d ${doux_a_dir}_insert -m 10 -t 3 > ${doux_a_output}/insert.txt
+# Update
+./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 100862 -d ${doux_a_dir}_update -m 10 -t 3 > ${doux_a_output}/update_init.txt
+sleep 10
+./ycsb_bench_2 -k 16 -v 1024 -c -w 1 --use_dropmap=false --decoupled_compaction=true -e 100862 -n 100862 -d ${doux_a_dir}_update -m 10 -t 3 > ${doux_a_output}/update.txt
+# # Get
+./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 100862 -d ${doux_a_dir}_get -m 10 -t 3 > ${doux_a_output}/get_init.txt
+sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 2 --use_dropmap=false --decoupled_compaction=true -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/get.txt
-# Scan
+# # Scan
 # ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=false --decoupled_compaction=true -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/scan_init.txt
 # sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 3 --use_dropmap=false --decoupled_compaction=true -e 10082 -n 10 -d ${doux_dir} -m 10 -t 3 > ${doux_a_output}/scan.txt
 
 
-# Doux-B
-# Insert
-./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=true --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/insert_init.txt
-sleep 10
-./ycsb_bench_2 -k 16 -v 1024 -c -w 0 --use_dropmap=true --decoupled_compaction=false -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/insert.txt
-# # # Update
+# # Doux-B
+# # Insert
+# ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=true --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/insert_init.txt
+# sleep 10
+# ./ycsb_bench_2 -k 16 -v 1024 -c -w 0 --use_dropmap=true --decoupled_compaction=false -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/insert.txt
+# # Update
 # ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=true --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/update_init.txt
 # sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 1 --use_dropmap=true --decoupled_compaction=false -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/update.txt
@@ -70,24 +74,24 @@ sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=true --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/get_init.txt
 # sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 2 --use_dropmap=true --decoupled_compaction=false -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/get.txt
-# # # Scan
+# # Scan
 # ./ycsb_bench_2 -k 16 -v 1024 --init_db --use_dropmap=true --decoupled_compaction=false -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/scan_init.txt
 # sleep 10
 # ./ycsb_bench_2 -k 16 -v 1024 -c -w 3 --use_dropmap=true --decoupled_compaction=false -e 10082 -n 10 -d ${doux_dir} -m 10 -t 3 > ${doux_b_output}/scan.txt
 
-# # Doux
-# # Insert
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/insert_init.txt
+# Doux
+# Insert
+# ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 100862 -d ${doux_dir}_insert -m 10 -t 3 > ${doux_output}/insert_init.txt
 # sleep 10
-# ./ycsb_bench_2 -k 16 -v 1024 -c -w 0 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/insert.txt
+# ./ycsb_bench_2 -k 16 -v 1024 -c -w 0 -e 100862 -n 10082 -d ${doux_dir}_insert -m 10 -t 3 > ${doux_output}/insert.txt
 # # Update
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/update_init.txt
+# ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 100862 -d ${doux_dir}_update -m 10 -t 3 > ${doux_output}/update_init.txt
 # sleep 10
-# ./ycsb_bench_2 -k 16 -v 1024 -c -w 1 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/update.txt
-# # Get
-# ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get_init.txt
+# ./ycsb_bench_2 -k 16 -v 1024 -c -w 1 -e 100862 -n 100862 -d ${doux_dir}_update -m 10 -t 3 > ${doux_output}/update.txt
+# Get
+# ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 100862 -d ${doux_dir}_get -m 10 -t 3 > ${doux_output}/get_init.txt
 # sleep 10
-# ./ycsb_bench_2 -k 16 -v 1024 -c -w 2 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get.txt
+# ./ycsb_bench_2 -k 16 -v 1024 -c -w 2 -e 100862 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get.txt
 # # Scan
 # ./ycsb_bench_2 -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/scan_init.txt
 # sleep 10

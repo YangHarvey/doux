@@ -75,20 +75,20 @@ mkdir -p ${rise_output}
 
 
 # Doux
-# # Insert
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/insert_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 -c -w 0 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/insert.txt
+# Insert
+./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/insert_init.txt
+sleep 10
+./ycsb_bench -k 16 -v 1024 -c -w 0 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/insert.txt
 
-# # Update
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/update_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 -c -w 1 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/update.txt
+# Update
+./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/update_init.txt
+sleep 10
+./ycsb_bench -k 16 -v 1024 -c -w 1 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/update.txt
 
-# # Get
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 --unlimit_fd -w 2 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get.txt
+# Get
+./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get_init.txt
+sleep 10
+./ycsb_bench -k 16 -v 1024 --unlimit_fd -w 2 -e 10082 -n 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/get.txt
 
 # Scan
 ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${doux_dir} -m 10 -t 3 > ${doux_output}/scan_init.txt

@@ -197,6 +197,12 @@ int main(int argc, char *argv[]) {
         write_options.sync = false;
         instance->ResetAll();
 
+	    if (options.compression == leveldb::kSnappyCompression) {
+            std::cout << "LevelDB开启了Snappy压缩" << std::endl;
+        } else if (options.compression == leveldb::kNoCompression) {
+            std::cout << "LevelDB未开启压缩" << std::endl;
+        }
+        
         if (fresh_write && iteration == 0) {
             string command = "rm -rf " + db_location;
             system(command.c_str());
@@ -540,6 +546,9 @@ int main(int argc, char *argv[]) {
             printf("FileStats %d %d %lu %lu %u %u %lu %d\n", it.first, it.second.level, it.second.start,
                 it.second.end, it.second.num_lookup_pos, it.second.num_lookup_neg, it.second.size, it.first < file_data->watermark ? 0 : 1);
         }
+
+        std::cout << "Dependency Graph size (logical) = " << adgMod::db->GetCurrentVersion()->dep_.dep_map_.size() << std::endl;
+        
         if (db) {
             delete db;
         }
@@ -575,8 +584,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // drop map size, drop map gain
     std::cout << "adgmod::drop_map_size = " << adgMod::drop_map_size << std::endl;
+    std::cout << "adgmod::drop_map_size (physical) = " << db->drop_map.size() * 16 << "b" << std::endl;
     std::cout << "adgmod::drop_count_gain = " << adgMod::drop_count_gain << std::endl;
+
+    // dependency graph size, dependency graph gain
+    
+    std::cout << "Dependency Graph size (logical) = " << db->GetCurrentVersion()->dep_.dep_map_.size() << std::endl;
     std::cout << "adgMod::redirect_count = " << adgMod::redirect_count << std::endl;
     std::cout << "adgMod::direct_count = " << adgMod::direct_count << std::endl;
 }
