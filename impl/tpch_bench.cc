@@ -380,6 +380,9 @@ int main(int argc, char *argv[]) {
             instance->StartTimer(13);
         
 
+            /*
+                calculate the range of shipdate, discount, and quantity
+            */
             uint32_t shipdate_start, shipdate_end;
             double discount_start, discount_end;
             uint32_t quantity_start, quantity_end;
@@ -425,6 +428,8 @@ int main(int argc, char *argv[]) {
 
                 std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
             }
+
+            
             if (adgMod::MOD == 8) {
                 // Wisckey
                 if(adgMod::use_secondary_index) {
@@ -557,7 +562,14 @@ int main(int argc, char *argv[]) {
                         Slice secondary_key = db_iter->key();
                         Slice primary_key = db_iter->value();
 
-                        // std::cout << "primary_key: " << std::string(primary_key.data(), primary_key.size()) << std::endl;
+                        uint32_t shipdate = DecodeBigEndianFixed32(secondary_key.data() + sk_shipdate_offset);
+                        uint32_t quantity = DecodeBigEndianFixed32(secondary_key.data() + sk_quantity_offset);
+
+                        if(shipdate < shipdate_start || shipdate >= shipdate_end ||
+                            quantity < quantity_start || quantity >= quantity_end) {
+                            continue;
+                        }
+
                         string value;
                         Status s = db->Get(ReadOptions(), primary_key, &value);
 

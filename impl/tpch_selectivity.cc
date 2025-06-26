@@ -101,7 +101,7 @@ std::random_device rd;
 std::mt19937 gen(rd());
 std::uniform_int_distribution<> distribution(1, 999);
 
-void EncodeRow(const vector<string>& row, string* key, string* value) {
+void EncodeRow(const vector<string>& row, string* key, string* value, int value_size) {
     // Encode key
     key->append(fill_key(row[l_orderkey], 16));
     key->append(fill_key(row[l_linenumber], 8));
@@ -153,14 +153,48 @@ void EncodeRow(const vector<string>& row, string* key, string* value) {
     commitdate = uniformDate(row[l_commitdate].c_str());
     PutFixed32(value, commitdate);
 
-    string shipinstruct = fill_value(row[l_shipinstruct], 64);
-    PutLengthPrefixedSlice(value, shipinstruct);
 
-    string shipmode = fill_value(row[l_shipmode], 64);
-    PutLengthPrefixedSlice(value, shipmode);
+    if(value_size == 314) {
+        // default value size
+        string shipinstruct = fill_value(row[l_shipinstruct], 64);
+        PutLengthPrefixedSlice(value, shipinstruct);
 
-    string comment = fill_value(row[l_comment], 128);
-    PutLengthPrefixedSlice(value, comment);
+        string shipmode = fill_value(row[l_shipmode], 64);
+        PutLengthPrefixedSlice(value, shipmode);
+
+        string comment = fill_value(row[l_comment], 128);
+        PutLengthPrefixedSlice(value, comment);
+    } else if(value_size == 64) {
+        // value size == 64, 58 + 2 + 2 + 2
+        string shipinstruct = std::string(row[l_shipinstruct], 2);
+        PutLengthPrefixedSlice(value, shipinstruct);
+
+        string shipmode = std::string(row[l_shipmode], 2);
+        PutLengthPrefixedSlice(value, shipmode);
+
+        string comment = std::string(row[l_comment], 2);
+        PutLengthPrefixedSlice(value, comment);
+    } else if(value_size == 256) {
+        string shipinstruct = fill_value(row[l_shipinstruct], 66);
+        PutLengthPrefixedSlice(value, shipinstruct);
+
+        string shipmode = fill_value(row[l_shipmode], 66);
+        PutLengthPrefixedSlice(value, shipmode);
+
+        string comment = fill_value(row[l_comment], 66);
+        PutLengthPrefixedSlice(value, comment);
+    } else if(value_size == 1024) {
+        string shipinstruct = fill_value(row[l_shipinstruct], 322);
+        PutLengthPrefixedSlice(value, shipinstruct);
+
+        string shipmode = fill_value(row[l_shipmode], 322);
+        PutLengthPrefixedSlice(value, shipmode);
+
+        string comment = fill_value(row[l_comment], 322);
+        PutLengthPrefixedSlice(value, comment);
+    } else {
+        assert(0);
+    }
 }
 
 constexpr size_t shipdate_offset = 0;
@@ -171,18 +205,26 @@ constexpr size_t receiptdate_offset = 8;
 
 // build secondary index
 // shipdate + quantity + receiptdate + pk as secondary index
-void encodeSecondaryKey(const vector<string>& row, string* secondary_key, uint32_t shipdate = 0) {
+void encodeSecondaryKey(const vector<string>& row, string* secondary_key, uint32_t shipdate_predefined = 65535, uint32_t quantity_predefined = 65535) {
     // encode index
     std::string index_key = fill_value("index", 8);
     secondary_key->append(index_key);
 
-    if(shipdate == 0) {
-        shipdate = uniformDate(row[l_shipdate].c_str());    
+
+    uint32_t shipdate = 0;
+    if(shipdate_predefined == 65535) {
+        shipdate = uniformDate(row[l_shipdate].c_str());
+    } else {
+        shipdate = shipdate_predefined;
     }
     PutBigEndianFixed32(secondary_key, shipdate);
 
     uint32_t quantity = 0;
-    quantity = std::stoul(row[l_quantity].c_str(), nullptr, 10);
+    if(quantity_predefined == 65535) {
+        quantity = std::stoul(row[l_quantity].c_str(), nullptr, 10);
+    } else {
+        quantity = quantity_predefined;
+    }
     PutBigEndianFixed32(secondary_key, quantity);
 
     uint32_t receiptdate = 0;
@@ -193,6 +235,8 @@ void encodeSecondaryKey(const vector<string>& row, string* secondary_key, uint32
     secondary_key->append(fill_key(row[l_orderkey], 16));
     secondary_key->append(fill_key(row[l_linenumber], 8));
 }
+
+
 
 constexpr size_t sk_shipdate_offset = 8;
 constexpr size_t sk_quantity_offset = sk_shipdate_offset + sizeof(uint32_t);
@@ -230,38 +274,6 @@ bool sk_compare(const Slice &sk1, const Slice &sk2) {
     return linenumber_cmp <= 0;
 }
 
-
-void cal_start_end(string *secondary_start, string *secondary_end, double theta) {
-
-    {
-        std::vector<string> start_row;
-        start_row.resize(20);
-        start_row[l_shipdate] = "1992-01-01";
-        start_row[l_quantity] = "0";
-        start_row[l_receiptdate] = "1993-01-01";
-        start_row[l_orderkey] = "0";
-        start_row[l_linenumber] = "0";
-        encodeSecondaryKey(start_row, secondary_start);
-
-        std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
-
-        std::vector<string> end_row;
-        end_row.resize(20);
-        end_row[l_shipdate] = "1994-01-01";
-        end_row[l_quantity] = "99999";
-        end_row[l_receiptdate] = "1998-12-31";
-        end_row[l_orderkey] = "9000000000";
-        end_row[l_linenumber] = "90000";
-
-        uint32_t end_date_num = (uniformDate(end_date) - uniformDate(start_date)) * theta + uniformDate(start_date);
-
-        encodeSecondaryKey(end_row, secondary_end, end_date_num);
-
-        std::cout << "uniformDate(start_date) = " << uniformDate(start_date) << ", uniformDate(end_date) = " << uniformDate(end_date) << ", end_date_num" << std::endl;
-        std::cout << "set theta = " << theta << ", actual selectivity = " << double(end_date_num - uniformDate(start_date)) / (uniformDate(end_date) - uniformDate(start_date)) << std::endl;
-    }
-}
-
 /*
     Query Type
     select
@@ -281,8 +293,16 @@ int main(int argc, char *argv[]) {
     bool print_file_info, evict, unlimit_fd;
     uint32_t start1, end1, start2, end2;
 
+    int value_size = -1;
+
     int query_type;
     bool predefined_range;
+
+    double selectivity_shipdate;
+    double selectivity_quantity;
+
+    adgMod::key_size = 16;
+    adgMod::value_size = 314;
 
     cxxopts::Options commandline_options("leveldb tpch test", "Testing leveldb based on tpch lineitem.");
     commandline_options.add_options()
@@ -303,7 +323,10 @@ int main(int argc, char *argv[]) {
             ("start1", "start for attribute 1", cxxopts::value<uint32_t>(start1)->default_value("1"))
             ("end1", "end for attribute 1", cxxopts::value<uint32_t>(end1)->default_value("10"))
             ("start2", "start for attribute 2", cxxopts::value<uint32_t>(start2)->default_value("1"))
-            ("end2", "end for attribute 2", cxxopts::value<uint32_t>(end2)->default_value("10"));
+            ("end2", "end for attribute 2", cxxopts::value<uint32_t>(end2)->default_value("10"))
+            ("v, value_size", "value size", cxxopts::value<int>(adgMod::value_size)->default_value("314"))
+            ("s_shipdate", "selectivity_shipdate", cxxopts::value<double>(selectivity_shipdate)->default_value("0.01"))
+            ("s_quantity", "selectivity_quantity", cxxopts::value<double>(selectivity_quantity)->default_value("0.01"));
 
     auto result = commandline_options.parse(argc, argv);
     if (result.count("help")) {
@@ -311,8 +334,6 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
     
-    adgMod::key_size = 16;
-    adgMod::value_size = 314;
     adgMod::fd_limit = unlimit_fd ? 1024 * 1024 : 1024;
     DB* db;
     Options options;
@@ -332,7 +353,7 @@ int main(int argc, char *argv[]) {
     doux::Region<2, 32> region = aabb.ToIntervals();
 
     adgMod::Stats* instance = adgMod::Stats::GetInstance();
-    vector<vector<size_t>> times(30);
+    vector<vector<size_t>> times(20);
     instance->ResetAll();
 
     cout << "input_filename: " << input_filename << ", fresh_write: " << fresh_write << endl;
@@ -351,8 +372,12 @@ int main(int argc, char *argv[]) {
         while (getline(input, src)) {
             // cout << src << endl;
             splitRow(src, row);
+            // for (int i = 0; i < row.size(); i++) {
+            //     cout << row[i] << endl;
+            // }
+            // cout << endl;
             string key, value;
-            EncodeRow(row, &key, &value);
+            EncodeRow(row, &key, &value, adgMod::value_size);
             // cout << "key: " << key.size() << ", value: " << value.size() << endl; 
 
             instance->StartTimer(9);
@@ -380,24 +405,19 @@ int main(int argc, char *argv[]) {
         }
         
         if (print_file_info) {
-            db->PrintFileInfo();
+            // db->PrintFileInfo();
         }
         adgMod::db->WaitForBackground();
         delete db;
     }
 
-    // std::vector<double> theta_vector = {0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.01, 0.011, 0.012, 0.013, 0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.02, 0.021, 0.022, 0.023, 0.024, 0.025, 0.026, 0.027, 0.028, 0.029, 0.10, 0.11, 0.12, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7};
-    // std::vector<double> theta_vector = {0.01, 0.011, 0.012, 0.013, 0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.02, 0.021, 0.022, 0.023, 0.024, 0.025, 0.026, 0.027, 0.028, 0.029, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.2, 0.3, 0.4, 0.5};
     
-    std::vector<double> theta_vector = {0.024};
-    for (size_t iteration = 0; iteration < theta_vector.size(); ++iteration) {
+    for (size_t iteration = 0; iteration < num_iteration; ++iteration) {
         if (evict) {
             system("sync; echo 3 | tee /proc/sys/vm/drop_caches");
             cout << "Drop all caches" << endl;
         }
 
-        // theta
-        double theta = theta_vector[iteration];
         // cout << "Starting up!" << endl;
         // cout << "Dim 1 from " << read_options.start1 << " to " << read_options.end1 << endl;
         // cout << "Dim 2 from " << read_options.start2 << " to " << read_options.end2 << endl; 
@@ -422,142 +442,84 @@ int main(int argc, char *argv[]) {
                 shipdate_start  = uniformDate("1993-01-01");
                 shipdate_end    = uniformDate("1994-01-01");
                 
-                discount_start  = 0.03 * 100;
-                discount_end    = 0.05 * 100;
+                discount_start  = 0.00 * 100;
+                discount_end    = 100;
 
                 quantity_start  = 0;
                 quantity_end    = 24;
+            } else {
+                // Calculate shipdate range
+                uint32_t total_days = gapDays(start_date, end_date);
+                uint32_t range_days = static_cast<uint32_t>(total_days * selectivity_shipdate) == 0 ? 1 : static_cast<uint32_t>(total_days * selectivity_shipdate);
+                shipdate_start = uniformDate("1992-01-01");
+                shipdate_end = shipdate_start + range_days;
+
+                // Calculate quantity range
+                uint32_t max_quantity = 50;
+                uint32_t range_quantity = static_cast<uint32_t>(max_quantity * selectivity_quantity) == 0 ? 1 : static_cast<uint32_t>(max_quantity * selectivity_quantity);
+                quantity_start = 0;
+                quantity_end = range_quantity;
+
+                // discount range
+                discount_start = 0;
+                discount_end = 1 * 100;
             }
             std::cout << "shipdate_start: " << shipdate_start << ", shipdate_end: " << shipdate_end << std::endl;
             std::cout << "discount_start: " << discount_start << ", discount_end: " << discount_end << std::endl;
             std::cout << "quantity_start: " << quantity_start << ", quantity_end: " << quantity_end << std::endl;
             
             string secondary_start, secondary_end;
-
-            
             /*
                 calculate the secondary start and secondary end based on shipdate, discount, and quantity
             */
-            cal_start_end(&secondary_start, &secondary_end, theta);
-            if (adgMod::MOD == 8) {
-                // Wisckey
-                if(adgMod::use_secondary_index) {
-                    
-                } else {
-                    // 没有secondary index，需要全表扫描
-                    db_iter = db->NewIterator(read_options);
-                    instance->StartTimer(4);
-                    db_iter->SeekToFirst();
-                    instance->PauseTimer(4);
+            if(!predefined_range) {
+                std::vector<string> start_row;
+                start_row.resize(20);
+                start_row[l_shipdate] = "1993-01-01";
+                start_row[l_quantity] = "0";
+                start_row[l_receiptdate] = "1992-01-01";
+                start_row[l_orderkey] = "0";
+                start_row[l_linenumber] = "0";
+                encodeSecondaryKey(start_row, &secondary_start);
 
-                    instance->StartTimer(17);
-                    for (; db_iter->Valid(); db_iter->Next()) {
-                        Slice value = db_iter->value();
-                        Slice key = db_iter->key();
+                std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
-                        uint32_t attr1 = DecodeFixed32(value.data());
-                        uint32_t attr2 = DecodeFixed32(value.data() + sizeof(uint32_t));
-                        if (start1 <= attr1 && attr1 <= end1 && start2 <= attr2 && attr2 <= end2) {
-                            ++res_count;
-                        }
-                    }
-                    instance->PauseTimer(17);
-                }
-            } else if (adgMod::MOD == 9) {
-                db_iter = db->NewVIterator(read_options);
-                instance->StartTimer(4);
-                db_iter->Seek(Slice());
-                instance->PauseTimer(4);
+                std::vector<string> end_row;
+                end_row.resize(20);
+                end_row[l_shipdate] = "1994-01-01";
+                end_row[l_quantity] = "24";
+                end_row[l_receiptdate] = "1998-12-31";
+                end_row[l_orderkey] = "9000000000";
+                end_row[l_linenumber] = "90000";
+                encodeSecondaryKey(end_row, &secondary_end);
 
-                instance->StartTimer(17);
-                for (; db_iter->Valid(); db_iter->Next()) {
-                    Slice key = db_iter->key();
-                    Slice value = db_iter->value();
-                    ++res_count;
-                }
-                instance->PauseTimer(17);
-            } else if (adgMod::MOD == 10) {
-                uint64_t scan_len = 0;
-                cout << "Morton code from " << read_options.start << " to "  << read_options.end << endl;
-                for (const auto interval : region.intervals_) {
-                    cout << "interval from " << interval.start_ << " to " << interval.end_ << endl;
-                    scan_len += interval.end_ - interval.start_;
-                }
-                cout << "scan length: " << scan_len << endl;
-                db_iter = db->NewVIterator(read_options);
-                instance->StartTimer(4);
-                db_iter->Seek(Slice());
-                instance->PauseTimer(4);
+                std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+            } else {
+                std::vector<string> start_row;
+                start_row.resize(20);
+                start_row[l_shipdate] = "1993-01-01";
+                start_row[l_quantity] = "0";
+                start_row[l_receiptdate] = "1992-01-01";
+                start_row[l_orderkey] = "0";
+                start_row[l_linenumber] = "0";
+                encodeSecondaryKey(start_row, &secondary_start, shipdate_start, quantity_start);
 
-                instance->StartTimer(17);
-                for (; db_iter->Valid(); db_iter->Next()) {
-                    Slice key = db_iter->key();
-                    Slice value = db_iter->value();
-                    ++res_count;
-                }
-                instance->PauseTimer(17);
-            } 
-            else if (adgMod::MOD == 12) {
-                // RISE
+                std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
-                if(adgMod::use_secondary_index) {
+                std::vector<string> end_row;
+                end_row.resize(20);
+                end_row[l_shipdate] = "1994-01-01";
+                end_row[l_quantity] = "24";
+                end_row[l_receiptdate] = "1998-12-31";
+                end_row[l_orderkey] = "9000000000";
+                end_row[l_linenumber] = "90000";
+                encodeSecondaryKey(end_row, &secondary_end, shipdate_end, quantity_end);
 
-                    db_iter = db->NewIterator(read_options);
-
-                    instance->StartTimer(4);
-                    db_iter->Seek(secondary_start);
-                    instance->PauseTimer(4);
-
-                    if (db_iter->Valid()) {
-                        std::cout << "First key after Seek: " << db_iter->key().ToString() << std::endl;
-                    } else {
-                        std::cout << "No valid key found after Seek." << std::endl;
-                    }
-
-                    instance->StartTimer(17);
-                    int total_count = 0;
-                    for (; db_iter->Valid() && sk_compare(db_iter->key(), secondary_end); db_iter->Next()) {
-                        Slice secondary_key = db_iter->key();
-                        Slice value_address = db_iter->value();
-
-                        uint32_t group_index = DecodeFixed32(value_address.data());
-                        uint64_t vaddress = DecodeFixed64(value_address.data() + sizeof(uint32_t));
-                        uint32_t vsize = DecodeFixed32(value_address.data() + sizeof(uint32_t) + sizeof(uint64_t));
-
-                        string value;
-                        instance->StartTimer(18);  
-                        db->GroupVGet(group_index, vaddress, vsize, &value);
-                        instance->PauseTimer(18);
-
-                        // if find the value
-                        uint32_t shipdate = DecodeBigEndianFixed32(value.data() + shipdate_offset);
-                        uint64_t discount = DecodeFixed64(value.data() + discount_offset);
-                        uint32_t quantity = DecodeBigEndianFixed32(value.data() + quantity_offset);
-
-                        // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
-                        if(shipdate >= shipdate_start && shipdate <= shipdate_end && quantity >= quantity_start && quantity <= quantity_end) {
-                            ++res_count;
-                        }
-                        total_count++;
-                    }
-                    instance->PauseTimer(17);
-                    std::cout << "total count: = " << total_count << std::endl;
+                std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+            }
 
 
-                    /*
-                        secondary index seek time.
-                    */
-                    instance->StartTimer(22);
-                    db_iter->Seek(secondary_start);
-                    for (; db_iter->Valid() && sk_compare(db_iter->key(), secondary_end); db_iter->Next()) {
-                        Slice secondary_key = db_iter->key();
-                        Slice value_address = db_iter->value();
-                    }
-                    instance->PauseTimer(22);
-                } else {
-                    // no secondary index
-                }    
-            } else{
+            if(adgMod::MOD == 0) {
                 // LevelDB
                 if(adgMod::use_secondary_index) {
                     // use secondary_index to find the primary key first
@@ -579,42 +541,39 @@ int main(int argc, char *argv[]) {
                     instance->StartTimer(17);
 
                     int total_count = 0;
-                    
                     for (; db_iter->Valid() && sk_compare(db_iter->key(), secondary_end); db_iter->Next()) {
                         Slice secondary_key = db_iter->key();
                         Slice primary_key = db_iter->value();
 
-                        instance->StartTimer(18);       
+                        // uint32_t shipdate = DecodeBigEndianFixed32(secondary_key.data() + sk_shipdate_offset);
+                        // uint32_t quantity = DecodeBigEndianFixed32(secondary_key.data() + sk_quantity_offset);
+
+                        // if(shipdate < shipdate_start || shipdate >= shipdate_end ||
+                        //     quantity < quantity_start || quantity >= quantity_end) {
+                        //     continue;
+                        // }
+                        
+                        instance->StartTimer(18);
                         string value;
                         Status s = db->Get(ReadOptions(), primary_key, &value);
                         instance->PauseTimer(18);
 
-                        instance->StartTimer(20);
                         // if find the value
                         if(s.ok()) {
                             uint32_t shipdate = DecodeBigEndianFixed32(value.data() + shipdate_offset);
-                            uint64_t discount = DecodeFixed64(value.data() + discount_offset);
+                            uint32_t discount = DecodeFixed64(value.data() + discount_offset);
                             uint32_t quantity = DecodeBigEndianFixed32(value.data() + quantity_offset);
 
                             // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
-                            if(shipdate >= shipdate_start && shipdate <= shipdate_end && quantity >= quantity_start && quantity <= quantity_end) {
+                            if(shipdate >= shipdate_start && shipdate <= shipdate_end && quantity >= quantity_start && quantity <= quantity_end && discount >= discount_start && discount < discount_end) {
                                 ++res_count;
                             }
                         }
                         total_count++;
-                        instance->PauseTimer(20, true);
                     }
-
                     instance->PauseTimer(17);
                     std::cout << "total count: " << total_count << std::endl;
 
-                    instance->StartTimer(22);
-                    db_iter->Seek(secondary_start);
-                    for (; db_iter->Valid() && sk_compare(db_iter->key(), secondary_end); db_iter->Next()) {
-                        Slice secondary_key = db_iter->key();
-                        Slice value_address = db_iter->value();
-                    }
-                    instance->PauseTimer(22);
                 }else {
                     // no secondary index, need full table scan
 
@@ -628,26 +587,26 @@ int main(int argc, char *argv[]) {
                         Slice key = db_iter->key();
                         Slice value = db_iter->value();
 
-                        instance->StartTimer(20);
                         uint32_t shipdate = DecodeBigEndianFixed32(value.data() + shipdate_offset);
                         uint64_t discount = DecodeFixed64(value.data() + discount_offset);
                         uint32_t quantity = DecodeBigEndianFixed32(value.data() + quantity_offset);
 
                         // std::cout << "shipdate: " << shipdate << ", discount: " << discount << ", quantity: " << quantity << std::endl;
-                        if(shipdate >= shipdate_start && shipdate <= shipdate_end && quantity >= quantity_start && quantity <= quantity_end) {
+                        if(shipdate >= shipdate_start && shipdate <= shipdate_end && quantity >= quantity_start && quantity <= quantity_end && discount >= discount_start && discount < discount_end) {
                             ++res_count;
                         }
-                        instance->PauseTimer(20, true);
                     }
                     instance->PauseTimer(17);
                 }
+            } else {
+                std::cerr << "MOD is not supported" << std::endl;
             }
             instance->PauseTimer(13, true);
             cout << "Num of entries within range: " << res_count << endl;
             delete db_iter;
-        } 
-
+        }
         
+    
         /*
             report running message
         */
@@ -656,7 +615,6 @@ int main(int argc, char *argv[]) {
             times[s].push_back(instance->ReportTime(s));
         }
         adgMod::db->WaitForBackground();
-        instance->ResetAll();  // Reset all timers after reporting
         sleep(10);
 
         // for (auto& event_array : events) {

@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
-#include "db/db_impl.h"
 #include "leveldb/slice.h"
 #include "leveldb/env.h"
 #include "Counter.h"

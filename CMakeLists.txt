@@ -399,7 +399,7 @@ if(LEVELDB_BUILD_TESTS)
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_2.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_3.cc")
-
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_selectivity.cc")
 
     # TODO(costan): This test also uses
     #               "${PROJECT_SOURCE_DIR}/util/env_{posix|windows}_test_helper.h"

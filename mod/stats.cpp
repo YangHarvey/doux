@@ -12,7 +12,7 @@ namespace adgMod {
 
     Stats* Stats::singleton = nullptr;
 
-    Stats::Stats() : timers(20, Timer{}), initial_time(__rdtsc()) {
+    Stats::Stats() : timers(30, Timer{}), initial_time(__rdtsc()) {
         levelled_counters[0].name = "LevelModel";
         levelled_counters[1].name = "FileModel";
         levelled_counters[2].name = "Baseline";

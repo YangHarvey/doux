@@ -595,6 +595,14 @@ int main(int argc, char *argv[]) {
                         Slice secondary_key = db_iter->key();
                         Slice primary_key = db_iter->value();
 
+                        // uint32_t shipdate = DecodeBigEndianFixed32(secondary_key.data() + sk_shipdate_offset);
+                        // uint32_t quantity = DecodeBigEndianFixed32(secondary_key.data() + sk_quantity_offset);
+
+                        // if(shipdate < shipdate_start || shipdate >= shipdate_end ||
+                        //     quantity < quantity_start || quantity >= quantity_end) {
+                        //     continue;
+                        // }
+                        
                         // std::cout << "primary_key: " << std::string(primary_key.data(), primary_key.size()) << std::endl;
                         string value;
                         Status s = db->Get(ReadOptions(), primary_key, &value);

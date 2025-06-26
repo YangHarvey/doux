@@ -2236,49 +2236,49 @@ void Compaction::ReleaseInputs() {
 
 
 void Version::PrintAll() const {
-    for (int i = 0; i < config::kNumLevels; ++i) {
-      for (int j = 0; j < files_[i].size(); ++j) {
-        if (j == 0) printf("Level %d\n", i);
-        FileMetaData* file = files_[i][j];
-        string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
-        string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
-        printf("File %d in level %d:\n"
-                "\tNumber: %lu\n"
-                "\tSize: %lu\n"
-                "\tNumEntries: %lu\n"
-                "\tKey Range: %s to %s\n",
-                j, i, file->number, file->file_size, file->num_keys,
-                small_key.c_str(), large_key.c_str());
-      }
-    }
+    // for (int i = 0; i < config::kNumLevels; ++i) {
+    //   for (int j = 0; j < files_[i].size(); ++j) {
+    //     if (j == 0) printf("Level %d\n", i);
+    //     FileMetaData* file = files_[i][j];
+    //     string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
+    //     string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+    //     printf("File %d in level %d:\n"
+    //             "\tNumber: %lu\n"
+    //             "\tSize: %lu\n"
+    //             "\tNumEntries: %lu\n"
+    //             "\tKey Range: %s to %s\n",
+    //             j, i, file->number, file->file_size, file->num_keys,
+    //             small_key.c_str(), large_key.c_str());
+    //   }
+    // }
 
-    printf("\n");
-    int levels = adgMod::MOD == 10 ? 2 : config::kNumLevels;
-    for (int i = 0 ; i < levels; ++i) {
-      for (int j = 0; j < vfiles_[i].size(); ++j) {
-        if (j == 0) printf("Level %d\n", i);
-        FileMetaData* file = vfiles_[i][j];
-        string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
-        string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
-        uint64_t small_vkey = 0, large_vkey = 0;
-        if (adgMod::MOD == 10) {
-          small_key = small_key.substr(0, small_key.size() - 8);
-          large_key = large_key.substr(0, large_key.size() - 8);
-          small_vkey = *reinterpret_cast<uint64_t*>(small_key.data() + small_key.size() - 8);
-          large_vkey = *reinterpret_cast<uint64_t*>(large_key.data() + large_key.size() - 8);
-        }
-        printf("VFile %d in level %d:\n"
-                "\tNumber: %lu\n"
-                "\tSize: %lu\n"
-                "\tNumEntries: %lu\n"
-                "\tKey Range: %s to %s\n",
-                j, i, file->number, file->file_size, file->num_keys,
-                small_key.c_str(), large_key.c_str());
-        if (adgMod::MOD == 10) {
-          printf("\tVKey Range: %lu to %lu\n", small_vkey, large_vkey);
-        }
-      }
-    }
+    // printf("\n");
+    // int levels = adgMod::MOD == 10 ? 2 : config::kNumLevels;
+    // for (int i = 0 ; i < levels; ++i) {
+    //   for (int j = 0; j < vfiles_[i].size(); ++j) {
+    //     if (j == 0) printf("Level %d\n", i);
+    //     FileMetaData* file = vfiles_[i][j];
+    //     string small_key = string(file->smallest.user_key().data(), file->smallest.user_key().size());
+    //     string large_key = string(file->largest.user_key().data(), file->largest.user_key().size());
+    //     uint64_t small_vkey = 0, large_vkey = 0;
+    //     if (adgMod::MOD == 10) {
+    //       small_key = small_key.substr(0, small_key.size() - 8);
+    //       large_key = large_key.substr(0, large_key.size() - 8);
+    //       small_vkey = *reinterpret_cast<uint64_t*>(small_key.data() + small_key.size() - 8);
+    //       large_vkey = *reinterpret_cast<uint64_t*>(large_key.data() + large_key.size() - 8);
+    //     }
+    //     printf("VFile %d in level %d:\n"
+    //             "\tNumber: %lu\n"
+    //             "\tSize: %lu\n"
+    //             "\tNumEntries: %lu\n"
+    //             "\tKey Range: %s to %s\n",
+    //             j, i, file->number, file->file_size, file->num_keys,
+    //             small_key.c_str(), large_key.c_str());
+    //     if (adgMod::MOD == 10) {
+    //       printf("\tVKey Range: %lu to %lu\n", small_vkey, large_vkey);
+    //     }
+    //   }
+    // }
 }
 
 bool Version::FillData(const ReadOptions &options, FileMetaData *meta, adgMod::LearnedIndexData* data) {
