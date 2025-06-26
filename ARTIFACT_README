@@ -1,60 +1,12 @@
-Artifacts of Paper #475
-
-We have provided a machine from CloudLab to reproduce our experiments. Please see the login
-credentials from hotcrp. We use a c220g2 machine in Cloudlab Wisconsin.
-
-After logging on to the machine, run `scripts/run_all_expr.sh` to run the artifact and everything
-is done. We have already set up the whole experiment environment and necessary data. The
-parsed results are printed out to stdout and also written to files:
-~/evaluation/expr_{exp_name}.txt
-
-
-
-
-
 Instructions in detail if you want to setup by yourself:
-
-We have already set up the testing environment in the home directory. If you want to setup
-by yourself, please follow these steps after logging on to the machine:
-```
-cd ~
-rm -rf learned-leveldb/
-rm -rf build/
-rm -rf evaluation/
-git clone git@bitbucket.org:daiyifandanny/learned-leveldb.git
-mkdir build
-mkdir evaluation
-cd build
-cmake ../learned-leveldb -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON
-make -j
-cd ~
-```
-
-We have included datasets and trace files under `/mnt/db`, all of which are ready to use.
-In addition, `/mnt/ssd` contains loaded database files. If you prefer to load them yourself,
-please run `scripts/load_db.sh`.
 
 We provide scripts to reproduce the following experiments:
 
-- `scripts/run_dataset.sh` reproduces how our system is influenced by various datasets (Section
-  5.2.1).
-- `scripts/run_load_order.sh` reproduces how sequential/random dataset load order affects lookup
-  latencies (Section 5.2.2).
-- `scripts/run_request_distribution.sh` reproduces lookup latencies under six request
-  distributions (Section 5.2.3).
-- `scripts/run_ycsb.sh` reproduces how our system performs under YCSB workloads (Section 5.4.1).
-- `scripts/run_sosd.sh` reproduces how our system performs under SOSD workloads (Section 5.4.2).
+- `scripts/run_tpch.sh` reproduces how our system performs under TPCH workloads
+- `scripts/run_ycsb.sh`  reproduces how our system performs under YCSB workloads
+- `scripts/run_microbenchmark.sh` reproduces how our system performs under micorbenchmark workloads
 
 To run all of them at once, please type in `scripts/run_all_expr.sh`.
-
-We leave out experiments for Section 5.3 (Read-Write Mix Workload) and Section 5.5 (Fast Storage).
-- A full reproduction of Section 5.3 needs more than one day and manual code changes to switch
-  to different versions. The performance on mix workloads can be represented by YCSB.
-- Section 5.5 needs a different set of machine configuration that is hard to provide access to.
-
-
-
-
 
 Instructions in more detail if you want to do single testing by yourself:
 
