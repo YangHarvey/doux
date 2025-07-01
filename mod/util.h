@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
+#include "db/db_impl.h"
 #include "leveldb/slice.h"
 #include "leveldb/env.h"
 #include "Counter.h"
@@ -18,6 +19,21 @@ using std::vector;
 using std::map;
 using leveldb::Slice;
 
+// 定义操作类型
+enum OperationType {
+    OP_INSERT = 0,
+    OP_READ = 1,
+    OP_UPDATE = 2,
+    OP_SCAN = 3
+};
+
+// 定义操作记录结构
+struct Operation {
+    string key;
+    OperationType type;
+    Operation(const string& k, OperationType t) : key(k), type(t) {}
+    Operation() : key(""), type(OP_READ) {} // 默认构造函数
+};
 
 namespace adgMod {
 
@@ -80,6 +96,8 @@ namespace adgMod {
 
     extern vector<string> keys;
     extern vector<int> put_idx;
+    extern vector<Operation> operations;
+    
     extern int cur_progress;
     extern int last_progress;
     extern vector<Counter> levelled_counters;

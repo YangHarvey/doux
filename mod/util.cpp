@@ -64,6 +64,8 @@ namespace adgMod {
 
     vector<string> keys;
     vector<int> put_idx;
+    vector<Operation> operations;
+    
     int cur_progress = 0;
     int last_progress = 0;
     vector<Counter> levelled_counters(12);

@@ -66,18 +66,18 @@ enum WorkloadType {
 // Regenerate keys after init db
 // Existing keys: [0, num_entries - 1]
 // Beyond existing keys: [num_entries, 999,999,999,999,999] (within 16 bytes)
-void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_entries, uint64_t num_operations, int load_type) {
+void fillKeysByWorkloads(vector<Operation>& operations, int workload_type, uint64_t num_entries, uint64_t num_operations, int load_type) {
     std::default_random_engine e1(255);
     std::uniform_int_distribution<uint64_t> udist_within_key(0, num_entries - 1);
     std::uniform_int_distribution<uint64_t> udist_beyond_key(num_entries, 999999999999999);
     zipfian_int_distribution<uint64_t> zipf_dist_within_key(0, num_entries - 1, 0.9);
     zipfian_int_distribution<uint64_t> zipf_dist_beyond_key(num_entries, num_entries + num_operations, 0.9);
-    keys.reserve(num_operations);
+    operations.reserve(num_operations);
 
     switch (workload_type) {
         case WorkloadType::Insert: {
             for (uint64_t i = 0; i < num_operations; ++i) {
-                keys.push_back(generate_key(to_string(udist_beyond_key(e1))));
+                operations.emplace_back(generate_key(to_string(udist_beyond_key(e1))), OP_INSERT);
             }
             break;
         }
@@ -85,7 +85,9 @@ void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_e
         case WorkloadType::Get:
         case WorkloadType::Scan: {
             for (uint64_t i = 0; i < num_operations; ++i) {
-                keys.push_back(generate_key(to_string(udist_within_key(e1))));
+                operations.emplace_back(generate_key(to_string(udist_within_key(e1))), 
+                    workload_type == WorkloadType::Update ? OP_UPDATE : 
+                    workload_type == WorkloadType::Scan ? OP_SCAN : OP_READ);
             }
             break;
         }
@@ -93,24 +95,48 @@ void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_e
         case WorkloadType::YCSB_B:
         case WorkloadType::YCSB_C: {
             for (uint64_t i = 0; i < num_operations; ++i) {
-                keys.push_back(generate_key(to_string(zipf_dist_within_key(e1))));
+                operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ);
             }
             break;
         }
-        case WorkloadType::YCSB_D:
+        case WorkloadType::YCSB_D: {
+            // 生成插入操作的key（随机分布在整个操作序列中）
+            std::vector<uint64_t> inserted_keys;
+            std::uniform_real_distribution<double> insert_dist(0.0, 1.0);
+            
+            for (uint64_t i = 0; i < num_operations; ++i) {
+                if (insert_dist(e1) < 0.05) {
+                    // 插入操作 - 使用新的key
+                    uint64_t new_key = zipf_dist_beyond_key(e1);
+                    operations.emplace_back(generate_key(to_string(new_key)), OP_INSERT);
+                    inserted_keys.push_back(new_key);
+                } else {
+                    // 读取操作 - 偏向于最近插入的key
+                    if (!inserted_keys.empty() && insert_dist(e1) < 0.8) {
+                        // 80%概率读取最近插入的key
+                        uint64_t recent_key = inserted_keys.back();
+                        operations.emplace_back(generate_key(to_string(recent_key)), OP_READ);
+                    } else {
+                        // 20%概率读取其他key
+                        operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ);
+                    }
+                }
+            }
+            break;
+        }
         case WorkloadType::YCSB_E: {
             uint64_t insert_keys = num_operations * 0.05;
             for (uint64_t i = 0; i < insert_keys; ++i) {
-                keys.push_back(generate_key(to_string(zipf_dist_beyond_key(e1))));
+                operations.emplace_back(generate_key(to_string(zipf_dist_beyond_key(e1))), OP_INSERT);
             }
             for (uint64_t i = insert_keys; i < num_operations; ++i) {
-                keys.push_back(generate_key(to_string(zipf_dist_within_key(e1))));
+                operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_SCAN);
             }
             break;
         }
         case WorkloadType::YCSB_F: {
             for (uint64_t i = 0; i < num_operations; ++i) {
-                keys.push_back(generate_key(to_string(zipf_dist_within_key(e1))));
+                operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ);
             }
             break;
         }
@@ -119,7 +145,7 @@ void fillKeysByWorkloads(vector<string>& keys, int workload_type, uint64_t num_e
 
     if (load_type == LoadType::Ordered) {
         for (uint64_t i = 0; i < num_operations; i++) {
-            keys[i] = generate_key(to_string(i));
+            operations[i].key = generate_key(to_string(i));
         }
     }
 
@@ -172,13 +198,13 @@ int main(int argc, char *argv[]) {
 
     adgMod::fd_limit = unlimit_fd ? 1024 * 1024 : 1024;
 
-    vector<string>& keys = adgMod::keys;
+    vector<Operation>& operations = adgMod::operations;
     if (fresh_write) {
         // keys: [0, num_entries - 1]
         for (uint64_t i = 0; i < num_entries; ++i) {
-            keys.push_back(generate_key(to_string(i)));
+            operations.emplace_back(generate_key(to_string(i)), OP_READ);
         }
-        cout << "Generate keys num: " << keys.size() << endl;
+        cout << "Generate keys num: " << operations.size() << endl;
     }
 
     adgMod::Stats* instance = adgMod::Stats::GetInstance();
@@ -216,31 +242,31 @@ int main(int argc, char *argv[]) {
                 load data
             */
             instance->StartTimer(9);
-            int cut_size = keys.size() / 100000;
+            int cut_size = operations.size() / 100000;
             std::vector<std::pair<int, int>> chunks;
             switch (load_type) {
                 case LoadType::Ordered: {
                     for (int cut = 0; cut < cut_size; ++cut) {
-                        chunks.emplace_back(keys.size() * cut / cut_size, keys.size() * (cut + 1) / cut_size);
+                        chunks.emplace_back(operations.size() * cut / cut_size, operations.size() * (cut + 1) / cut_size);
                     }
                     break;
                 }
                 case LoadType::ReversedChunk: {
                     for (int cut = cut_size - 1; cut >= 0; --cut) {
-                        chunks.emplace_back(keys.size() * cut / cut_size, keys.size() * (cut + 1) / cut_size);
+                        chunks.emplace_back(operations.size() * cut / cut_size, operations.size() * (cut + 1) / cut_size);
                     }
                     break;
                 }
                 case LoadType::Random: {
-                    std::random_shuffle(keys.begin(), keys.end());
+                    std::shuffle(operations.begin(), operations.end(), e1);
                     for (int cut = 0; cut < cut_size; ++cut) {
-                        chunks.emplace_back(keys.size() * cut / cut_size, keys.size() * (cut + 1) / cut_size);
+                        chunks.emplace_back(operations.size() * cut / cut_size, operations.size() * (cut + 1) / cut_size);
                     }
                     break;
                 }
                 case LoadType::RandomChunk: {
                     for (int cut = 0; cut < cut_size; ++cut) {
-                        chunks.emplace_back(keys.size() * cut / cut_size, keys.size() * (cut + 1) / cut_size);
+                        chunks.emplace_back(operations.size() * cut / cut_size, operations.size() * (cut + 1) / cut_size);
                     }
                     std::random_shuffle(chunks.begin(), chunks.end());
                     break;
@@ -251,7 +277,7 @@ int main(int argc, char *argv[]) {
             for (int cut = 0; cut < chunks.size(); ++cut) {
                 for (int i = chunks[cut].first; i < chunks[cut].second; ++i) {
                     string value = generate_value(uniform_dist_value(e1));
-                    status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
+                    status = db->Put(write_options, operations[i].key, {value.data(), (uint64_t) adgMod::value_size});
                     adgMod::put_idx.emplace_back(i);
                 }
             }
@@ -266,7 +292,7 @@ int main(int argc, char *argv[]) {
             }
             // instance->PauseTimer(19, true);
 
-            keys.clear();
+            operations.clear();
             adgMod::db->WaitForBackground();
             if (print_file_info && iteration == 0) db->PrintFileInfo();
             delete db;
@@ -284,8 +310,8 @@ int main(int argc, char *argv[]) {
         */
         if (!fresh_write || iteration > 0) {
             // Prepare keys for later workloads
-            keys.clear();
-            fillKeysByWorkloads(keys, workload_type, num_entries, num_operations, load_type);
+            operations.clear();
+            fillKeysByWorkloads(operations, workload_type, num_entries, num_operations, load_type);
 
             cout << "Starting up" << endl;
             status = DB::Open(options, db_location, &db);
@@ -301,39 +327,47 @@ int main(int argc, char *argv[]) {
             std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
             instance->StartTimer(13);
-            for (int i = 0; i < num_operations; ++i) {
+            for (size_t i = 0; i < num_operations; ++i) {
                 if (start_new_event) {
                     detailed_times.push_back(instance->GetTime());
                     start_new_event = false;
                 }
 
-                // Call interface according to workloads
-                switch (workload_type) {
-                    case WorkloadType::Insert:
-                    case WorkloadType::Update: {
+                // 根据操作类型执行相应的操作
+                switch (operations[i].type) {
+                    case OP_INSERT: {
                         // Put
                         string value = generate_value(uniform_dist_value(e2));
                         instance->StartTimer(10);
-                        status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
+                        status = db->Put(write_options, operations[i].key, {value.data(), (uint64_t) adgMod::value_size});
                         instance->PauseTimer(10);
                         adgMod::put_idx.emplace_back(i);
                         break;
                     }
-                    case WorkloadType::Get: {
+                    case OP_READ: {
                         // Get
                         string value;
                         instance->StartTimer(4);
-                        status = db->Get(read_options, keys[i], &value);
+                        status = db->Get(read_options, operations[i].key, &value);
                         instance->PauseTimer(4);
                         if (!status.ok()) {
-                            cout << keys[i] << " Not Found" << endl;
+                            cout << operations[i].key << " Not Found" << endl;
                         }
                         break;
                     }
-                    case WorkloadType::Scan: {
+                    case OP_UPDATE: {
+                        // Update (Put)
+                        string value = generate_value(uniform_dist_value(e2));
+                        instance->StartTimer(10);
+                        status = db->Put(write_options, operations[i].key, {value.data(), (uint64_t) adgMod::value_size});
+                        instance->PauseTimer(10);
+                        adgMod::put_idx.emplace_back(i);
+                        break;
+                    }
+                    case OP_SCAN: {
                         // Seek
                         instance->StartTimer(4);
-                        db_iter->Seek(keys[i]);
+                        db_iter->Seek(operations[i].key);
                         instance->PauseTimer(4);
 
                         // Scan
@@ -350,136 +384,7 @@ int main(int argc, char *argv[]) {
                         instance->PauseTimer(17);
                         break;
                     }
-                    case WorkloadType::YCSB_A: {
-                        // Update Heavy
-                        // 50% updates, 50% reads
-                        if (i > 0.5 * num_operations) {
-                            string value = generate_value(uniform_dist_value(e2));
-                            instance->StartTimer(10);
-                            status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
-                            instance->PauseTimer(10);
-                            adgMod::put_idx.emplace_back(i);
-                        } else {
-                            string value;
-                            instance->StartTimer(4);
-                            status = db->Get(read_options, keys[i], &value);
-                            instance->PauseTimer(4);
-                            if (!status.ok()) {
-                                cout << keys[i] << " Not Found" << endl;
-                            }
-                        }
-                        break;
-                    }
-                    case WorkloadType::YCSB_B: {
-                        // Read Mostly
-                        // 5% updates, 95% reads
-                        if (i < 0.05 * num_operations) {
-                            string value = generate_value(uniform_dist_value(e2));
-                            instance->StartTimer(10);
-                            status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
-                            instance->PauseTimer(10);
-                            adgMod::put_idx.emplace_back(i);
-                        } else {
-                            string value;
-                            instance->StartTimer(4);
-                            status = db->Get(read_options, keys[i], &value);
-                            instance->PauseTimer(4);
-                            if (!status.ok()) {
-                                cout << keys[i] << " Not Found" << endl;
-                            }
-                        }
-                        break;
-                    }
-                    case WorkloadType::YCSB_C: {
-                        // Read Only
-                        // 100% reads
-                        string value;
-                        instance->StartTimer(4);
-                        status = db->Get(read_options, keys[i], &value);
-                        instance->PauseTimer(4);
-                        if (!status.ok()) {
-                            cout << keys[i] << " Not Found" << endl;
-                        }
-                        break;
-                    }
-                    case WorkloadType::YCSB_D: {
-                        // Read Latest
-                        // 5% inserts, 95% reads
-                        if (i < 0.05 * num_operations) {
-                            string value = generate_value(uniform_dist_value(e2));
-                            instance->StartTimer(10);
-                            status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
-                            instance->PauseTimer(10);
-                            adgMod::put_idx.emplace_back(i);
-                        } else {
-                            string value;
-                            instance->StartTimer(4);
-                            status = db->Get(read_options, keys[i], &value);
-                            instance->PauseTimer(4);
-                            if (!status.ok()) {
-                                cout << keys[i] << " Not Found" << endl;
-                            }
-                        }
-                        break;
-                    }
-                    case WorkloadType::YCSB_E: {
-                        // Scan Mostly
-                        // 5% inserts, 95% scans
-                        if (i < 0.05 * num_operations) {
-                            string value = generate_value(uniform_dist_value(e2));
-                            instance->StartTimer(10);
-                            status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
-                            instance->PauseTimer(10);
-                            adgMod::put_idx.emplace_back(i);
-                        } else {
-                            // Seek
-                            instance->StartTimer(4);
-                            db_iter->Seek(keys[i]);
-                            instance->PauseTimer(4);
-
-                            // Scan
-                            instance->StartTimer(17);
-                            for (int r = 0; r < length_range; ++r) {
-                                if (!db_iter->Valid()) break;
-                                Slice key = db_iter->key();
-                                string value = db_iter->value().ToString();
-                                db_iter->Next();
-                            }
-                            instance->PauseTimer(17);
-                        }
-                        break;
-                    }
-                    case WorkloadType::YCSB_F: {
-                        // Read-Modify-Write
-                        // 50% read-modify-write, 50% reads
-                        if (i < 0.5 * num_operations) {
-                            // Read
-                            string value;
-                            instance->StartTimer(4);
-                            status = db->Get(read_options, keys[i], &value);
-                            instance->PauseTimer(4);
-                            if (!status.ok()) {
-                                cout << keys[i] << " Not Found" << endl;
-                            }
-
-                            // Modify-Write
-                            value = generate_value(uniform_dist_value(e2));
-                            instance->StartTimer(10);
-                            status = db->Put(write_options, keys[i], {value.data(), (uint64_t) adgMod::value_size});
-                            instance->PauseTimer(10);
-                            adgMod::put_idx.emplace_back(i);
-                        } else {
-                            string value;
-                            instance->StartTimer(4);
-                            status = db->Get(read_options, keys[i], &value);
-                            instance->PauseTimer(4);
-                            if (!status.ok()) {
-                                cout << keys[i] << " Not Found" << endl;
-                            }
-                        }
-                        break;
-                    }
-                    default: assert(false && "Unsupported workload type.");
+                    default: assert(false && "Unsupported operation type.");
                 }
                 
                 // Stat

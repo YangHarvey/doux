@@ -23,55 +23,37 @@ mkdir -p ${doux_output}
 mkdir -p ${rise_dir}
 mkdir -p ${rise_output}
 
-# # Insert
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/insert_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 -c -w 0 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/insert.txt
-
-# # Update
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/update_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 -c -w 1 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/update.txt
-
-# # Get
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/get_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 -c -w 2 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/get.txt
-
-# # Scan
-# ./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/scan_init.txt
-# sleep 10
-# ./ycsb_bench -k 16 -v 1024 -c -w 3 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/scan.txt
-
 # YCSB-A
-./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_a_init.txt
+./ycsb_bench -k 16 -v 1024 --init_db -e 100862 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_a_init_sf100.txt
 sleep 10
-./ycsb_bench -k 16 -v 1024 -c -w 4 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_a.txt
+./ycsb_bench -k 16 -v 1024 -c -w 4 -e 100862 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_a_sf100.txt
 
-# YCSB-B
-./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_b_init.txt
+# # YCSB-B
+./ycsb_bench -k 16 -v 1024 --init_db -e 100862 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_b_init_sf100.txt
 sleep 10
-./ycsb_bench -k 16 -v 1024 -c -w 5 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_b.txt
+./ycsb_bench -k 16 -v 1024 -c -w 5 -e 100862 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_b_sf100.txt
 
 # YCSB-C
-./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_c_init.txt
+./ycsb_bench -k 16 -v 1024 --init_db -e 100862 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_c_init_sf100.txt
 sleep 10
-./ycsb_bench -k 16 -v 1024 -c -w 6 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_c.txt
+./ycsb_bench -k 16 -v 1024 -c -w 6 -e 100862 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_c_sf100.txt
 
 # YCSB-D
-./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_d_init.txt
+./ycsb_bench -k 16 -v 1024 --init_db -e 100862 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_d_init_sf100.txt
 sleep 10
-./ycsb_bench -k 16 -v 1024 -c -w 7 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_d.txt
+./ycsb_bench -k 16 -v 1024 -c -w 7 -e 100862 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_d_sf100.txt
 
 # YCSB-E
-./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_e_init.txt
+./ycsb_bench -k 16 -v 1024 --init_db -e 100862 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_e_init_sf100.txt
 sleep 10
-./ycsb_bench -k 16 -v 1024 -c -w 8 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_e.txt
+./ycsb_bench -k 16 -v 1024 -c -w 8 -e 100862 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_e_sf100.txt
 
 # YCSB-F
-./ycsb_bench -k 16 -v 1024 --init_db -e 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_f_init.txt
+./ycsb_bench -k 16 -v 1024 --init_db -e 100862 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_f_init_sf100.txt
 sleep 10
-./ycsb_bench -k 16 -v 1024 -c -w 9 -e 10082 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_f.txt
+./ycsb_bench -k 16 -v 1024 -c -w 9 -e 100862 -n 10082 -d ${leveldb_dir} -m 0 -t 3 > ${leveldb_output}/ycsb_f_sf100.txt
+
+
 
 
 # Doux

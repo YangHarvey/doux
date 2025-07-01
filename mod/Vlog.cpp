@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <iostream>
 #include "Vlog.h"
 #include "util.h"
 #include "util/coding.h"
