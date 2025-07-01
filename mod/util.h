@@ -24,7 +24,8 @@ enum OperationType {
     OP_INSERT = 0,
     OP_READ = 1,
     OP_UPDATE = 2,
-    OP_SCAN = 3
+    OP_READ_MODIFY_WRITE = 3,
+    OP_SCAN = 4
 };
 
 // 定义操作记录结构

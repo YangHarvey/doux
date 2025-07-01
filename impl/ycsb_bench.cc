@@ -91,16 +91,37 @@ void fillKeysByWorkloads(vector<Operation>& operations, int workload_type, uint6
             }
             break;
         }
-        case WorkloadType::YCSB_A:
-        case WorkloadType::YCSB_B:
+        case WorkloadType::YCSB_A: {
+            // 50% read, 50% update
+            for (uint64_t i = 0; i < num_operations; ++i) {
+                if (i % 2 == 0) {
+                    operations.emplace_back(generate_key(to_string(udist_within_key(e1))), OP_READ);
+                } else {
+                    operations.emplace_back(generate_key(to_string(udist_within_key(e1))), OP_UPDATE);
+                }
+            }
+            break;
+        }
+        case WorkloadType::YCSB_B: {
+            // 95% read, 5% update
+            for (uint64_t i = 0; i < num_operations; ++i) {
+                if (i % 20 == 0) {
+                    operations.emplace_back(generate_key(to_string(udist_within_key(e1))), OP_UPDATE);
+                } else {
+                    operations.emplace_back(generate_key(to_string(udist_within_key(e1))), OP_READ);
+                }
+            }
+            break;
+        }
         case WorkloadType::YCSB_C: {
+            // 100% read, 0% update
             for (uint64_t i = 0; i < num_operations; ++i) {
                 operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ);
             }
             break;
         }
         case WorkloadType::YCSB_D: {
-            // 生成插入操作的key（随机分布在整个操作序列中）
+            // 95% read latest, 5% insert
             std::vector<uint64_t> inserted_keys;
             std::uniform_real_distribution<double> insert_dist(0.0, 1.0);
             
@@ -125,6 +146,7 @@ void fillKeysByWorkloads(vector<Operation>& operations, int workload_type, uint6
             break;
         }
         case WorkloadType::YCSB_E: {
+            // 5% insert, 95% scan
             uint64_t insert_keys = num_operations * 0.05;
             for (uint64_t i = 0; i < insert_keys; ++i) {
                 operations.emplace_back(generate_key(to_string(zipf_dist_beyond_key(e1))), OP_INSERT);
@@ -135,8 +157,13 @@ void fillKeysByWorkloads(vector<Operation>& operations, int workload_type, uint6
             break;
         }
         case WorkloadType::YCSB_F: {
+            // 50% read, 50% read-modify-write
             for (uint64_t i = 0; i < num_operations; ++i) {
-                operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ);
+                if (i % 2 == 0) {
+                    operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ);
+                } else {
+                    operations.emplace_back(generate_key(to_string(zipf_dist_within_key(e1))), OP_READ_MODIFY_WRITE);
+                }
             }
             break;
         }
@@ -359,6 +386,21 @@ int main(int argc, char *argv[]) {
                         status = db->Put(write_options, operations[i].key, {value.data(), (uint64_t) adgMod::value_size});
                         instance->PauseTimer(10);
                         adgMod::put_idx.emplace_back(i);
+                        break;
+                    }
+                    case OP_READ_MODIFY_WRITE: {
+                        // Read-Modify-Write (Get-Put)
+                        string value;
+                        instance->StartTimer(4);
+                        status = db->Get(read_options, operations[i].key, &value);
+                        instance->PauseTimer(4);
+                        if (!status.ok()) {
+                            cout << operations[i].key << " Not Found" << endl;
+                        }
+                        string new_value = generate_value(uniform_dist_value(e2));
+                        instance->StartTimer(10);
+                        status = db->Put(write_options, operations[i].key, {new_value.data(), (uint64_t) adgMod::value_size});
+                        instance->PauseTimer(10);
                         break;
                     }
                     case OP_SCAN: {
