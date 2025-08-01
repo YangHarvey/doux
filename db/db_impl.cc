@@ -210,6 +210,12 @@ DBImpl::~DBImpl() {
   delete vlog;
   delete cold_vlog;
   adgMod::file_stats.clear();
+  delete grouped_vlog;
+  
+  // 清理全局指针，避免 use-after-free
+  if (adgMod::db == this) {
+    adgMod::db = nullptr;
+  }
 }
 
 Status DBImpl::NewDB() {
@@ -1659,8 +1665,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           it = vtables[vinputs[i]->number]->NewVIterator(options);
         }
 
-        it->SeekToFirst();
-        for (; it->Valid() && !shutting_down_.load(std::memory_order_acquire);) {
+        if (it != nullptr) {
+          it->SeekToFirst();
+          for (; it->Valid() && !shutting_down_.load(std::memory_order_acquire);) {
           Slice key = it->key();
           if (key_idx.find(key) != key_idx.end()) {
             if (compact->vbuilder == nullptr) {
@@ -1690,6 +1697,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           }
 
           it->Next();
+        }
         }
       }
     }
@@ -2515,7 +2523,7 @@ Status DBImpl::sPut(const WriteOptions& o, const Slice& key, const Slice &skey, 
     return DB::Put(o, skey, (Slice) {buffer, sizeof(buffer)});
   } else if (adgMod::MOD == 11) {
     // SineKV
-  }
+  } 
   return DB::Put(o, key, value);
 
   // if(adgMod::MOD != 11) {

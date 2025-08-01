@@ -212,7 +212,7 @@ class VMergingIterator : public Iterator {
 
   virtual ~VMergingIterator() { 
     delete[] children_;
-    delete cur_vkey_;
+    delete[] cur_vkey_;
   }
 
   virtual bool Valid() const { return (current_ != nullptr); }
@@ -285,12 +285,22 @@ class VMergingIterator : public Iterator {
         }
       }
     } else if (adgMod::MOD == 9) {
+      if (!current_ || !current_->Valid()) return; // 防止悬空
       Slice cur_vkey = current_->key();
+      // 检查 cur_vkey 是否足够大
+      if (cur_vkey.size() < adgMod::key_size + 16) {
+        // 直接跳过或报错
+        while (pos_ < n_ && (!current_ || !current_->Valid())) {
+          ++pos_;
+          if (pos_ < n_) current_ = &children_[pos_];
+        }
+        return;
+      }
       uint64_t cur_sort_key = DecodeFixed64(cur_vkey.data() + adgMod::key_size + 8);
       if (cur_sort_key < start_ || cur_sort_key > end_) {
-        while (pos_ < n_ && !current_->Valid()) {
+        while (pos_ < n_ && (!current_ || !current_->Valid())) {
           ++pos_;
-          current_ = &children_[pos_];
+          if (pos_ < n_) current_ = &children_[pos_];
         }
       }
     }

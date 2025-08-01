@@ -70,11 +70,21 @@ class DBIter : public Iterator {
   virtual Slice value() const {
     assert(valid_);
     Slice vaddr = (direction_ == kForward) ? iter_->value() : saved_value_;
+    
+    // Check if adgMod::db is still valid
+    if (adgMod::db == nullptr) {
+      return vaddr;  // Return raw value if db is already destroyed
+    }
+    
     if (adgMod::MOD == 7 || adgMod::MOD == 8) {
 #ifdef INTERNAL_TIMER
       adgMod::Stats* instance = adgMod::Stats::GetInstance();
       instance->StartTimer(12);
 #endif
+      // Check if vaddr is valid
+      if (vaddr.size() < sizeof(uint64_t) + sizeof(uint32_t) || vaddr.data() == nullptr) {
+        return vaddr;  // Return raw value if vaddr is too small or null
+      }
       uint64_t value_address = DecodeFixed64(vaddr.data());
       uint32_t value_size = DecodeFixed32(vaddr.data() + sizeof(uint64_t));
       Slice value = adgMod::db->vlog->ReadRecord2(value_address, value_size);
@@ -83,6 +93,14 @@ class DBIter : public Iterator {
 #endif
       return value;
     } else if (adgMod::MOD == 9) {
+      // Check if db is still valid
+      if (adgMod::db == nullptr) {
+        return vaddr;  // Return raw value if db is already destroyed
+      }
+      // 只有长度为12字节时才按 file_number 方式解析，否则直接返回原始 value（兼容 MemTable）
+      if (vaddr.size() != sizeof(uint32_t) * 3) {
+        return vaddr;
+      }
 #ifdef INTERNAL_TIMER
       adgMod::Stats* instance = adgMod::Stats::GetInstance();
       instance->StartTimer(12);
@@ -108,6 +126,16 @@ class DBIter : public Iterator {
 #endif
       return cur_res;
     } else if (adgMod::MOD == 10) {
+      // Check if db is still valid
+      if (adgMod::db == nullptr) {
+        return vaddr;  // Return raw value if db is already destroyed
+      }
+      
+      // Check if vaddr is valid
+      if (vaddr.size() < sizeof(uint32_t) * 3) {
+        return vaddr;  // Return raw value if vaddr is too small
+      }
+      
 #ifdef INTERNAL_TIMER
       adgMod::Stats* instance = adgMod::Stats::GetInstance();
       instance->StartTimer(12);
@@ -255,6 +283,7 @@ void DBIter::Next() {
   }
 
   FindNextUserEntry(true, &saved_key_);
+  if (!iter_->Valid()) valid_ = false; // <--- 新增
 }
 
 void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {

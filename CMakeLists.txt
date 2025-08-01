@@ -32,6 +32,18 @@ option(INTERNAL_TIMER_SWITCH "Enable internal timer" OFF)
 option(PROFILER_SWITCH "Enable profiler" OFF)
 option(NDEBUG_SWITCH "disable assertion" OFF)
 
+# 在 Debug 版本中启用 AddressSanitizer
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_options(-fsanitize=address)
+  add_link_options(-fsanitize=address)
+endif()
+
+# # 可选：在 Release 版本中也启用 AddressSanitizer（不推荐用于生产环境）
+# if(CMAKE_BUILD_TYPE STREQUAL "Release")
+#   add_compile_options(-fsanitize=address)
+#   add_link_options(-fsanitize=address)
+# endif()
+
 if (LEVEL_SWITCH)
   add_definitions(-DRECORD_LEVEL_INFO)
 endif(LEVEL_SWITCH)
@@ -398,7 +410,7 @@ if(LEVELDB_BUILD_TESTS)
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench_2.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_2.cc")
-    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_3.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_vary_value_size.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_selectivity.cc")
 
     # TODO(costan): This test also uses

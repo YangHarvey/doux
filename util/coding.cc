@@ -4,8 +4,6 @@
 
 #include "util/coding.h"
 
-#include <iostream>
-
 namespace leveldb {
 
 void EncodeFixed32(char* dst, uint32_t value) {

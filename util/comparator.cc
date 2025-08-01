@@ -105,13 +105,14 @@ class VKeyComparatorImpl : public Comparator {
 
   virtual int Compare(const Slice& key1, const Slice& key2) const {
     int sz1 = key1.size(), sz2 = key2.size();
+    assert(sz1 >= 16 && sz2 >= 16);
     const Slice skey1(key1.data() + sz1 - 8, 8);
     const Slice skey2(key2.data() + sz2 - 8, 8);
     int r = skey1.compare(skey2);
     if (r == 0) {
       const Slice ukey1(key1.data(), sz1 - 16);
       const Slice ukey2(key2.data(), sz2 - 16);
-      r = ukey2.compare(ukey2);
+      r = ukey1.compare(ukey2);
       if (r == 0) {
         const uint64_t num1 = DecodeFixed64(key1.data() + sz1 - 16);
         const uint64_t num2 = DecodeFixed64(key2.data() + sz2 - 16);

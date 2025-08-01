@@ -20,7 +20,9 @@ VLog::VLog(const std::string& vlog_name) : vlog_name(vlog_name), writer(nullptr)
     struct ::stat file_stat;
     ::stat(vlog_name.c_str(), &file_stat);
     vlog_size = file_stat.st_size;
-    scratch = new char[adgMod::value_size];
+    // Allocate enough space for the maximum possible record size
+    // This includes key size, value size, and metadata
+    scratch = new char[adgMod::value_size * 2]; // Add extra space for metadata
 }
 
 uint64_t VLog::AddRecord(const Slice& key, const Slice& value) {
@@ -113,5 +115,7 @@ void VLog::Reset() {
 VLog::~VLog() {
     Flush();
     delete[] scratch;
+    delete writer;
+    delete reader;
 }
 }

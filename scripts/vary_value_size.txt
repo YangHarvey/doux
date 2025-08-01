@@ -1,0 +1,364 @@
+-- The C compiler identification is GNU 13.2.0
+-- The CXX compiler identification is GNU 13.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+-- Looking for crc32c_value in crc32c
+-- Looking for crc32c_value in crc32c - not found
+-- Looking for snappy_compress in snappy
+-- Looking for snappy_compress in snappy - not found
+-- Looking for malloc in tcmalloc
+-- Looking for malloc in tcmalloc - not found
+-- Looking for fdatasync
+-- Looking for fdatasync - found
+-- Looking for F_FULLFSYNC
+-- Looking for F_FULLFSYNC - not found
+-- Performing Test HAVE_CLANG_THREAD_SAFETY
+-- Performing Test HAVE_CLANG_THREAD_SAFETY - Failed
+-- Performing Test HAVE_CXX17_HAS_INCLUDE
+-- Performing Test HAVE_CXX17_HAS_INCLUDE - Success
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Looking for sqlite3_open in sqlite3
+-- Looking for sqlite3_open in sqlite3 - not found
+-- Performing Test HAVE_KYOTOCABINET
+-- Performing Test HAVE_KYOTOCABINET - Failed
+-- Configuring done (2.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /projects/doux/build_debug
+[  0%] Building CXX object CMakeFiles/leveldb.dir/db/c.cc.o
+[  1%] Building CXX object CMakeFiles/leveldb.dir/db/builder.cc.o
+[  2%] Building CXX object CMakeFiles/leveldb.dir/db/dbformat.cc.o
+[  2%] Building CXX object CMakeFiles/leveldb.dir/db/db_iter.cc.o
+[  3%] Building CXX object CMakeFiles/leveldb.dir/db/db_impl.cc.o
+[  3%] Building CXX object CMakeFiles/leveldb.dir/db/dumpfile.cc.o
+[  3%] Building CXX object CMakeFiles/leveldb.dir/table/filter_block.cc.o
+[  5%] Building CXX object CMakeFiles/leveldb.dir/db/filename.cc.o
+[  5%] Building CXX object CMakeFiles/leveldb.dir/db/version_edit.cc.o
+[  5%] Building CXX object CMakeFiles/leveldb.dir/db/memtable.cc.o
+[  6%] Building CXX object CMakeFiles/leveldb.dir/db/log_reader.cc.o
+[  6%] Building CXX object CMakeFiles/leveldb.dir/db/repair.cc.o
+[  8%] Building CXX object CMakeFiles/leveldb.dir/table/block.cc.o
+[  8%] Building CXX object CMakeFiles/leveldb.dir/db/write_batch.cc.o
+[  9%] Building CXX object CMakeFiles/leveldb.dir/db/log_writer.cc.o
+[  9%] Building CXX object CMakeFiles/leveldb.dir/db/version_set.cc.o
+[  9%] Building CXX object CMakeFiles/leveldb.dir/table/block_builder.cc.o
+[  9%] Building CXX object CMakeFiles/leveldb.dir/db/table_cache.cc.o
+[  9%] Building CXX object CMakeFiles/leveldb.dir/table/table_builder.cc.o
+[ 10%] Building CXX object CMakeFiles/leveldb.dir/table/format.cc.o
+[ 11%] Building CXX object CMakeFiles/leveldb.dir/table/table.cc.o
+[ 12%] Building CXX object CMakeFiles/leveldb.dir/table/iterator.cc.o
+[ 12%] Building CXX object CMakeFiles/leveldb.dir/table/merger.cc.o
+[ 13%] Building CXX object CMakeFiles/leveldb.dir/util/bloom.cc.o
+[ 13%] Building CXX object CMakeFiles/leveldb.dir/table/two_level_iterator.cc.o
+[ 13%] Building CXX object CMakeFiles/leveldb.dir/util/arena.cc.o
+[ 13%] Building CXX object CMakeFiles/leveldb.dir/util/cache.cc.o
+[ 14%] Building CXX object CMakeFiles/leveldb.dir/util/coding.cc.o
+[ 14%] Building CXX object CMakeFiles/leveldb.dir/util/comparator.cc.o
+[ 15%] Building CXX object CMakeFiles/leveldb.dir/util/crc32c.cc.o
+[ 15%] Building CXX object CMakeFiles/leveldb.dir/util/env.cc.o
+[ 15%] Building CXX object CMakeFiles/leveldb.dir/util/hash.cc.o
+[ 16%] Building CXX object CMakeFiles/leveldb.dir/util/filter_policy.cc.o
+[ 16%] Building CXX object CMakeFiles/leveldb.dir/util/options.cc.o
+[ 17%] Building CXX object CMakeFiles/leveldb.dir/util/logging.cc.o
+[ 18%] Building CXX object CMakeFiles/leveldb.dir/util/status.cc.o
+[ 18%] Building CXX object CMakeFiles/leveldb.dir/mod/stats.cpp.o
+[ 19%] Building CXX object CMakeFiles/leveldb.dir/mod/plr.cpp.o
+[ 19%] Building CXX object CMakeFiles/leveldb.dir/mod/learned_index.cpp.o
+[ 20%] Building CXX object CMakeFiles/leveldb.dir/mod/util.cpp.o
+[ 20%] Building CXX object CMakeFiles/leveldb.dir/mod/Vlog.cpp.o
+[ 21%] Building CXX object CMakeFiles/leveldb.dir/mod/GroupedValueLog.cpp.o
+[ 21%] Building CXX object CMakeFiles/leveldb.dir/mod/Counter.cpp.o
+[ 22%] Building CXX object CMakeFiles/leveldb.dir/mod/event.cpp.o
+[ 22%] Building CXX object CMakeFiles/leveldb.dir/mod/timer.cpp.o
+[ 23%] Building CXX object CMakeFiles/leveldb.dir/util/env_posix.cc.o
+[ 23%] Building CXX object CMakeFiles/leveldb.dir/mod/CBMode_Learn.cpp.o
+[ 24%] Building CXX object CMakeFiles/leveldb.dir/helpers/memenv/memenv.cc.o
+/projects/doux/mod/plr.cpp: In member function 'Segment GreedyPLR::current_segment()':
+/projects/doux/mod/plr.cpp:97:63: warning: narrowing conversion of '((GreedyPLR*)this)->GreedyPLR::last_pt.point::x' from 'double' to 'uint64_t' {aka 'long unsigned int'} [-Wnarrowing]
+   97 |     Segment s = {segment_start, avg_slope, intercept, last_pt.x};
+      |                                                       ~~~~~~~~^
+/projects/doux/db/db_impl.cc: In member function 'leveldb::Status leveldb::DBImpl::InstallCompactionResults(CompactionState*)':
+/projects/doux/db/db_impl.cc:1458:48: warning: format '%d' expects argument of type 'int', but argument 3 has type 'uint64_t' {aka 'long unsigned int'} [-Wformat=]
+ 1458 |       Log(options_.info_log, "Dependency from %d to %d vfile",
+      |                                               ~^
+      |                                                |
+      |                                                int
+      |                                               %ld
+ 1459 |           compact->compaction->vinput(0, i)->number,
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                              |
+      |                                              uint64_t {aka long unsigned int}
+/projects/doux/db/db_impl.cc:1458:54: warning: format '%d' expects argument of type 'int', but argument 4 has type 'uint64_t' {aka 'long unsigned int'} [-Wformat=]
+ 1458 |       Log(options_.info_log, "Dependency from %d to %d vfile",
+      |                                                     ~^
+      |                                                      |
+      |                                                      int
+      |                                                     %ld
+ 1459 |           compact->compaction->vinput(0, i)->number,
+ 1460 |           compact->current_voutput()->number);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+      |                                       |
+      |                                       uint64_t {aka long unsigned int}
+[ 24%] Linking CXX static library libleveldb.a
+[ 24%] Built target leveldb
+[ 24%] Building CXX object CMakeFiles/issue320_test.dir/util/testharness.cc.o
+[ 24%] Building CXX object CMakeFiles/issue178_test.dir/util/testharness.cc.o
+[ 24%] Building CXX object CMakeFiles/c_test.dir/util/testutil.cc.o
+[ 24%] Building CXX object CMakeFiles/leveldbutil.dir/db/leveldbutil.cc.o
+[ 25%] Building CXX object CMakeFiles/c_test.dir/util/testharness.cc.o
+[ 25%] Building CXX object CMakeFiles/status_test.dir/util/testutil.cc.o
+[ 25%] Building CXX object CMakeFiles/no_destructor_test.dir/util/testharness.cc.o
+[ 27%] Building C object CMakeFiles/c_test.dir/db/c_test.c.o
+[ 27%] Building CXX object CMakeFiles/status_test.dir/util/testharness.cc.o
+[ 28%] Building CXX object CMakeFiles/status_test.dir/util/status_test.cc.o
+[ 30%] Building CXX object CMakeFiles/issue178_test.dir/util/testutil.cc.o
+[ 30%] Building CXX object CMakeFiles/issue200_test.dir/util/testharness.cc.o
+[ 29%] Building CXX object CMakeFiles/autocompact_test.dir/db/autocompact_test.cc.o
+[ 30%] Building CXX object CMakeFiles/no_destructor_test.dir/util/no_destructor_test.cc.o
+[ 31%] Building CXX object CMakeFiles/version_set_test.dir/util/testharness.cc.o
+[ 31%] Building CXX object CMakeFiles/dbformat_test.dir/util/testharness.cc.o
+[ 32%] Building CXX object CMakeFiles/issue178_test.dir/issues/issue178_test.cc.o
+[ 32%] Building CXX object CMakeFiles/version_set_test.dir/util/testutil.cc.o
+[ 33%] Building CXX object CMakeFiles/autocompact_test.dir/util/testharness.cc.o
+[ 34%] Building CXX object CMakeFiles/no_destructor_test.dir/util/testutil.cc.o
+[ 34%] Building CXX object CMakeFiles/issue320_test.dir/util/testutil.cc.o
+[ 34%] Building CXX object CMakeFiles/recovery_test.dir/util/testharness.cc.o
+[ 35%] Building CXX object CMakeFiles/version_set_test.dir/db/version_set_test.cc.o
+[ 36%] Building CXX object CMakeFiles/issue320_test.dir/issues/issue320_test.cc.o
+[ 37%] Building CXX object CMakeFiles/env_test.dir/util/testharness.cc.o
+[ 38%] Building CXX object CMakeFiles/issue200_test.dir/util/testutil.cc.o
+[ 34%] Building CXX object CMakeFiles/dbformat_test.dir/util/testutil.cc.o
+[ 38%] Building CXX object CMakeFiles/fault_injection_test.dir/util/testharness.cc.o
+[ 35%] Building CXX object CMakeFiles/dbformat_test.dir/db/dbformat_test.cc.o
+[ 38%] Building CXX object CMakeFiles/issue200_test.dir/issues/issue200_test.cc.o
+[ 38%] Building CXX object CMakeFiles/fault_injection_test.dir/db/fault_injection_test.cc.o
+[ 38%] Building CXX object CMakeFiles/autocompact_test.dir/util/testutil.cc.o
+[ 39%] Building CXX object CMakeFiles/recovery_test.dir/util/testutil.cc.o
+[ 40%] Building CXX object CMakeFiles/env_test.dir/util/env_test.cc.o
+[ 39%] Building CXX object CMakeFiles/recovery_test.dir/db/recovery_test.cc.o
+[ 40%] Building CXX object CMakeFiles/env_test.dir/util/testutil.cc.o
+[ 41%] Building CXX object CMakeFiles/fault_injection_test.dir/util/testutil.cc.o
+[ 41%] Building CXX object CMakeFiles/db_test.dir/util/testutil.cc.o
+[ 42%] Building CXX object CMakeFiles/corruption_test.dir/util/testharness.cc.o
+[ 43%] Building CXX object CMakeFiles/db_test.dir/util/testharness.cc.o
+[ 43%] Building CXX object CMakeFiles/filename_test.dir/util/testharness.cc.o
+[ 43%] Building CXX object CMakeFiles/corruption_test.dir/util/testutil.cc.o
+[ 44%] Building CXX object CMakeFiles/db_test.dir/db/db_test.cc.o
+[ 44%] Building CXX object CMakeFiles/corruption_test.dir/db/corruption_test.cc.o
+[ 45%] Building CXX object CMakeFiles/log_test.dir/util/testutil.cc.o
+[ 46%] Building CXX object CMakeFiles/filename_test.dir/util/testutil.cc.o
+[ 46%] Building CXX object CMakeFiles/log_test.dir/util/testharness.cc.o
+[ 47%] Building CXX object CMakeFiles/skiplist_test.dir/util/testharness.cc.o
+[ 47%] Building CXX object CMakeFiles/log_test.dir/db/log_test.cc.o
+[ 48%] Building CXX object CMakeFiles/version_edit_test.dir/util/testutil.cc.o
+[ 48%] Building CXX object CMakeFiles/version_edit_test.dir/util/testharness.cc.o
+[ 48%] Building CXX object CMakeFiles/write_batch_test.dir/util/testharness.cc.o
+[ 48%] Building CXX object CMakeFiles/filename_test.dir/db/filename_test.cc.o
+[ 48%] Building CXX object CMakeFiles/skiplist_test.dir/util/testutil.cc.o
+[ 49%] Building CXX object CMakeFiles/skiplist_test.dir/db/skiplist_test.cc.o
+[ 49%] Building CXX object CMakeFiles/version_edit_test.dir/db/version_edit_test.cc.o
+[ 50%] Building CXX object CMakeFiles/memenv_test.dir/util/testharness.cc.o
+[ 50%] Building CXX object CMakeFiles/write_batch_test.dir/db/write_batch_test.cc.o
+[ 51%] Building CXX object CMakeFiles/memenv_test.dir/util/testutil.cc.o
+[ 51%] Building CXX object CMakeFiles/write_batch_test.dir/util/testutil.cc.o
+[ 51%] Building CXX object CMakeFiles/table_test.dir/util/testutil.cc.o
+[ 51%] Building CXX object CMakeFiles/filter_block_test.dir/util/testharness.cc.o
+[ 52%] Building CXX object CMakeFiles/bloom_test.dir/util/testharness.cc.o
+[ 53%] Building CXX object CMakeFiles/memenv_test.dir/helpers/memenv/memenv_test.cc.o
+[ 54%] Building CXX object CMakeFiles/table_test.dir/util/testharness.cc.o
+[ 54%] Building CXX object CMakeFiles/arena_test.dir/util/testharness.cc.o
+[ 55%] Building CXX object CMakeFiles/cache_test.dir/util/testutil.cc.o
+[ 55%] Building CXX object CMakeFiles/table_test.dir/table/table_test.cc.o
+[ 55%] Building CXX object CMakeFiles/bloom_test.dir/util/testutil.cc.o
+[ 54%] Building CXX object CMakeFiles/filter_block_test.dir/table/filter_block_test.cc.o
+[ 54%] Building CXX object CMakeFiles/filter_block_test.dir/util/testutil.cc.o
+[ 56%] Building CXX object CMakeFiles/cache_test.dir/util/testharness.cc.o
+[ 56%] Building CXX object CMakeFiles/arena_test.dir/util/testutil.cc.o
+[ 57%] Building CXX object CMakeFiles/cache_test.dir/util/cache_test.cc.o
+[ 58%] Building CXX object CMakeFiles/arena_test.dir/util/arena_test.cc.o
+[ 60%] Building CXX object CMakeFiles/coding_test.dir/util/testharness.cc.o
+[ 60%] Building CXX object CMakeFiles/coding_test.dir/util/testutil.cc.o
+[ 61%] Building CXX object CMakeFiles/coding_test.dir/util/coding_test.cc.o
+[ 60%] Building CXX object CMakeFiles/bloom_test.dir/util/bloom_test.cc.o
+[ 61%] Building CXX object CMakeFiles/crc32c_test.dir/util/testharness.cc.o
+[ 62%] Building CXX object CMakeFiles/crc32c_test.dir/util/testutil.cc.o
+[ 63%] Building CXX object CMakeFiles/crc32c_test.dir/util/crc32c_test.cc.o
+[ 63%] Building CXX object CMakeFiles/hash_test.dir/util/testharness.cc.o
+[ 63%] Building CXX object CMakeFiles/hash_test.dir/util/hash_test.cc.o
+[ 63%] Building CXX object CMakeFiles/read.dir/util/testharness.cc.o
+[ 63%] Building CXX object CMakeFiles/logging_test.dir/util/testharness.cc.o
+[ 63%] Building CXX object CMakeFiles/hash_test.dir/util/testutil.cc.o
+[ 63%] Building CXX object CMakeFiles/logging_test.dir/util/logging_test.cc.o
+[ 64%] Building CXX object CMakeFiles/logging_test.dir/util/testutil.cc.o
+[ 65%] Building CXX object CMakeFiles/read.dir/util/testutil.cc.o
+[ 66%] Building CXX object CMakeFiles/read_cold.dir/util/testutil.cc.o
+[ 66%] Building CXX object CMakeFiles/read.dir/mod/read.cc.o
+[ 64%] Building CXX object CMakeFiles/read_cold.dir/util/testharness.cc.o
+[ 66%] Building CXX object CMakeFiles/ycsb_bench.dir/util/testharness.cc.o
+[ 66%] Building CXX object CMakeFiles/read_cold.dir/mod/read_cold.cc.o
+[ 67%] Building CXX object CMakeFiles/ycsb_bench.dir/util/testutil.cc.o
+[ 67%] Building CXX object CMakeFiles/ycsb_bench.dir/impl/ycsb_bench.cc.o
+[ 67%] Building CXX object CMakeFiles/ycsb_bench_2.dir/util/testharness.cc.o
+[ 68%] Building CXX object CMakeFiles/ycsb_bench_2.dir/util/testutil.cc.o
+[ 69%] Building CXX object CMakeFiles/ycsb_bench_2.dir/impl/ycsb_bench_2.cc.o
+[ 69%] Building CXX object CMakeFiles/tpch_bench.dir/util/testharness.cc.o
+[ 69%] Building CXX object CMakeFiles/tpch_bench_2.dir/util/testutil.cc.o
+[ 69%] Building CXX object CMakeFiles/tpch_bench.dir/util/testutil.cc.o
+[ 70%] Building CXX object CMakeFiles/tpch_bench_2.dir/util/testharness.cc.o
+[ 73%] Building CXX object CMakeFiles/tpch_bench.dir/impl/tpch_bench.cc.o
+[ 73%] Building CXX object CMakeFiles/tpch_bench_vary_value_size.dir/util/testharness.cc.o
+[ 73%] Building CXX object CMakeFiles/tpch_selectivity.dir/util/testharness.cc.o
+[ 71%] Building CXX object CMakeFiles/tpch_bench_2.dir/impl/tpch_bench_2.cc.o
+[ 74%] Building CXX object CMakeFiles/tpch_selectivity.dir/util/testutil.cc.o
+[ 74%] Building CXX object CMakeFiles/tpch_bench_vary_value_size.dir/util/testutil.cc.o
+[ 74%] Building CXX object CMakeFiles/tpch_bench_vary_value_size.dir/impl/tpch_bench_vary_value_size.cc.o
+[ 74%] Building CXX object CMakeFiles/env_posix_test.dir/util/testutil.cc.o
+[ 75%] Building CXX object CMakeFiles/env_posix_test.dir/util/env_posix_test.cc.o
+[ 76%] Building CXX object CMakeFiles/env_posix_test.dir/util/testharness.cc.o
+[ 76%] Building CXX object CMakeFiles/tpch_selectivity.dir/impl/tpch_selectivity.cc.o
+[ 76%] Building CXX object CMakeFiles/db_bench.dir/util/histogram.cc.o
+[ 77%] Building CXX object CMakeFiles/db_bench.dir/util/testutil.cc.o
+[ 77%] Building CXX object CMakeFiles/db_bench.dir/util/testharness.cc.o
+[ 78%] Building CXX object CMakeFiles/db_bench.dir/db/db_bench.cc.o
+[ 79%] Linking CXX executable leveldbutil
+[ 79%] Linking CXX executable c_test
+[ 80%] Linking CXX executable issue178_test
+[ 81%] Linking CXX executable no_destructor_test
+[ 81%] Linking CXX executable status_test
+[ 82%] Linking CXX executable issue200_test
+[ 83%] Linking CXX executable hash_test
+[ 83%] Built target leveldbutil
+[ 84%] Linking CXX executable filter_block_test
+[ 85%] Linking CXX executable crc32c_test
+[ 85%] Linking CXX executable dbformat_test
+[ 85%] Linking CXX executable arena_test
+[ 86%] Linking CXX executable filename_test
+[ 86%] Built target no_destructor_test
+[ 86%] Linking CXX executable issue320_test
+[ 86%] Built target c_test
+[ 86%] Built target status_test
+[ 87%] Linking CXX executable logging_test
+[ 87%] Linking CXX executable bloom_test
+[ 87%] Built target issue200_test
+[ 87%] Linking CXX executable env_posix_test
+[ 87%] Built target issue178_test
+[ 87%] Linking CXX executable cache_test
+[ 87%] Linking CXX executable coding_test
+[ 87%] Linking CXX executable env_test
+[ 88%] Linking CXX executable write_batch_test
+[ 88%] Built target dbformat_test
+[ 88%] Built target filename_test
+[ 88%] Built target hash_test
+[ 88%] Built target arena_test
+[ 88%] Built target filter_block_test
+[ 88%] Built target crc32c_test
+[ 88%] Built target issue320_test
+[ 88%] Linking CXX executable skiplist_test
+[ 88%] Built target logging_test
+[ 88%] Built target bloom_test
+[ 88%] Built target env_posix_test
+[ 89%] Linking CXX executable log_test
+[ 89%] Built target env_test
+[ 89%] Built target cache_test
+[ 89%] Built target coding_test
+[ 89%] Built target write_batch_test
+[ 89%] Built target skiplist_test
+[ 89%] Linking CXX executable autocompact_test
+[ 89%] Built target log_test
+[ 90%] Linking CXX executable version_edit_test
+[ 90%] Built target autocompact_test
+[ 91%] Linking CXX executable memenv_test
+[ 91%] Built target version_edit_test
+[ 91%] Linking CXX executable recovery_test
+/projects/doux/mod/read_cold.cc: In function 'int main(int, char**)':
+/projects/doux/mod/read_cold.cc:256:40: warning: 'void std::random_shuffle(_RAIter, _RAIter) [with _RAIter = __gnu_cxx::__normal_iterator<__cxx11::basic_string<char>*, vector<__cxx11::basic_string<char> > >]' is deprecated: use 'std::shuffle' instead [-Wdeprecated-declarations]
+  256 |                     std::random_shuffle(keys.begin(), keys.end());
+      |                     ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/13/algorithm:61,
+                 from /projects/doux/include/leveldb/status.h:16,
+                 from /projects/doux/include/leveldb/iterator.h:21,
+                 from /projects/doux/include/leveldb/db.h:12,
+                 from /projects/doux/mod/read_cold.cc:4:
+/usr/include/c++/13/bits/stl_algo.h:4581:5: note: declared here
+ 4581 |     random_shuffle(_RandomAccessIterator __first, _RandomAccessIterator __last)
+      |     ^~~~~~~~~~~~~~
+/projects/doux/mod/read_cold.cc:266:40: warning: 'void std::random_shuffle(_RAIter, _RAIter) [with _RAIter = __gnu_cxx::__normal_iterator<pair<int, int>*, vector<pair<int, int> > >]' is deprecated: use 'std::shuffle' instead [-Wdeprecated-declarations]
+  266 |                     std::random_shuffle(chunks.begin(), chunks.end());
+      |                     ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algo.h:4581:5: note: declared here
+ 4581 |     random_shuffle(_RandomAccessIterator __first, _RandomAccessIterator __last)
+      |     ^~~~~~~~~~~~~~
+/projects/doux/impl/ycsb_bench_2.cc: In function 'int main(int, char**)':
+/projects/doux/impl/ycsb_bench_2.cc:298:40: warning: 'void std::random_shuffle(_RAIter, _RAIter) [with _RAIter = __gnu_cxx::__normal_iterator<pair<int, int>*, vector<pair<int, int> > >]' is deprecated: use 'std::shuffle' instead [-Wdeprecated-declarations]
+  298 |                     std::random_shuffle(chunks.begin(), chunks.end());
+      |                     ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/13/algorithm:61,
+                 from /projects/doux/include/leveldb/status.h:16,
+                 from /projects/doux/include/leveldb/iterator.h:21,
+                 from /projects/doux/include/leveldb/db.h:12,
+                 from /projects/doux/impl/ycsb_bench_2.cc:9:
+/usr/include/c++/13/bits/stl_algo.h:4581:5: note: declared here
+ 4581 |     random_shuffle(_RandomAccessIterator __first, _RandomAccessIterator __last)
+      |     ^~~~~~~~~~~~~~
+[ 91%] Built target memenv_test
+[ 91%] Linking CXX executable db_bench
+[ 91%] Built target recovery_test
+[ 92%] Linking CXX executable version_set_test
+[ 93%] Linking CXX executable corruption_test
+[ 94%] Linking CXX executable fault_injection_test
+[ 94%] Built target version_set_test
+[ 94%] Built target db_bench
+[ 94%] Built target corruption_test
+[ 94%] Built target fault_injection_test
+[ 94%] Linking CXX executable table_test
+[ 94%] Built target table_test
+[ 94%] Linking CXX executable db_test
+[ 94%] Built target db_test
+[ 95%] Linking CXX executable read
+[ 95%] Linking CXX executable tpch_bench_2
+[ 95%] Built target read
+[ 96%] Linking CXX executable tpch_selectivity
+[ 96%] Built target tpch_bench_2
+[ 96%] Built target tpch_selectivity
+[ 97%] Linking CXX executable tpch_bench_vary_value_size
+[ 98%] Linking CXX executable read_cold
+[ 99%] Linking CXX executable ycsb_bench_2
+[ 99%] Linking CXX executable tpch_bench
+[ 99%] Built target tpch_bench_vary_value_size
+[100%] Linking CXX executable ycsb_bench
+[100%] Built target read_cold
+[100%] Built target ycsb_bench_2
+[100%] Built target tpch_bench
+[100%] Built target ycsb_bench
+tee: /proc/sys/vm/drop_caches: Read-only file system
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==956905==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55fe780f1d12 bp 0x7ffe66e0b110 sp 0x7ffe66e0b100 T0)
+==956905==The signal is caused by a READ memory access.
+==956905==Hint: address points to the zero page.
+    #0 0x55fe780f1d12 in leveldb::IteratorWrapper::value() const /projects/doux/table/iterator_wrapper.h:44
+    #1 0x55fe78102179 in value /projects/doux/table/two_level_iterator.cc:38
+    #2 0x55fe780f1d47 in leveldb::IteratorWrapper::value() const /projects/doux/table/iterator_wrapper.h:44
+    #3 0x55fe780f0e2c in value /projects/doux/table/merger.cc:325
+    #4 0x55fe78096281 in ParseKey /projects/doux/db/db_iter.cc:245
+    #5 0x55fe78096cc2 in FindNextUserEntry /projects/doux/db/db_iter.cc:295
+    #6 0x55fe78096a6c in Next /projects/doux/db/db_iter.cc:285
+    #7 0x55fe77f64c0f in main /projects/doux/impl/tpch_bench_vary_value_size.cc:412
+    #8 0x7f820ad101c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #9 0x7f820ad1028a in __libc_start_main_impl ../csu/libc-start.c:360
+    #10 0x55fe77f53f74 in _start (/projects/doux/build_debug/tpch_bench_vary_value_size+0x36f74) (BuildId: c71115e4ebbb055168d3f48ddf9c58ca7d6e985b)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /projects/doux/table/iterator_wrapper.h:44 in leveldb::IteratorWrapper::value() const
+==956905==ABORTING

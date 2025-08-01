@@ -268,7 +268,7 @@ void Version::AddVIterators(const ReadOptions& options,
                             std::vector<Iterator*>* iters) {
   for (size_t i = 0; i < vfiles_[0].size(); i++) {
     FileMetaData* vf = vfiles_[0][i];
-    Iterator* it;
+    Iterator* it = nullptr;
     if (vtables_.find(vf->number) == vtables_.end()) {
       std::string vfname = VTableFileName(vset_->dbname_, vf->number);
       RandomAccessFile* file = nullptr;
@@ -276,14 +276,17 @@ void Version::AddVIterators(const ReadOptions& options,
       Status s = vset_->env_->NewRandomAccessFile(vfname, &file);
       if (s.ok()) {
         s = Table::Open(*(vset_->options_), file, vf->file_size, &table);
-        vtables_[vf->number] = table;
-        it = table->NewVIterator(options);
+        if (s.ok() && table != nullptr) {
+          vtables_[vf->number] = table;
+          it = table->NewVIterator(options);
+        }
       }
     } else {
       it = vtables_[vf->number]->NewVIterator(options);
     }
-    assert(it != nullptr);
-    iters->push_back(it);
+    if (it != nullptr) {
+      iters->push_back(it);
+    }
   }
 
   int max_level = adgMod::MOD == 10 ? 2 : config::kNumLevels;
@@ -300,7 +303,7 @@ void Version::AddVIterators(const ReadOptions& options,
         }
       }
 
-      Iterator* it;
+      Iterator* it = nullptr;
       if (vtables_.find(vf->number) == vtables_.end()) {
         std::string vfname = VTableFileName(vset_->dbname_, vf->number);
         RandomAccessFile* file = nullptr;
@@ -308,14 +311,17 @@ void Version::AddVIterators(const ReadOptions& options,
         Status s = vset_->env_->NewRandomAccessFile(vfname, &file);
         if (s.ok()) {
           s = Table::Open(*(vset_->options_), file, vf->file_size, &table);
-          vtables_[vf->number] = table;
-          it = table->NewVIterator(options);
+          if (s.ok() && table != nullptr) {
+            vtables_[vf->number] = table;
+            it = table->NewVIterator(options);
+          }
         }
       } else {
         it = vtables_[vf->number]->NewVIterator(options);
       }
-      assert(it != nullptr);
-      iters->push_back(it);
+      if (it != nullptr) {
+        iters->push_back(it);
+      }
     }
   }
 }

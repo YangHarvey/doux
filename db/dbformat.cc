@@ -20,6 +20,13 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    increasing user key (according to user-supplied comparator)
   //    decreasing sequence number
   //    decreasing type (though sequence# should be enough to disambiguate)
+  
+  // Check if keys are valid internal keys
+  if (akey.size() < 8 || bkey.size() < 8) {
+    // If either key is too short, compare them as raw slices
+    return akey.compare(bkey);
+  }
+  
   int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
   if (r == 0) {
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);

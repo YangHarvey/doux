@@ -1,12 +1,12 @@
 cd ../build
 
-rm -rf *
 cmake ../../doux -DCMAKE_BUILD_TYPE=RELEASE -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 make -j
 
 # data path
 lineitem1=/projects/tpch-data/lineitem.tbl.1
 lineitem10=/projects/tpch-data/lineitem.tbl.10
+lineitem100=/projects/tpch-data/lineitem.tbl.100
 
 # working directory
 LevelDB_DIR=/projects/doux/tpch/leveldb_dir
@@ -30,11 +30,20 @@ mkdir -p ${LevelDB_SI_OUTPUT}
 mkdir -p ${RISE_OUTPUT}
 
 
-# TPC-H Q6
-# LevelDB
-./tpch_bench --init_db -t 6 -f $lineitem1 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q6.txt
-# LevelDB(SI)
-./tpch_bench --init_db --si -t 6 -f $lineitem1 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_SI_OUTPUT/tpch_q6.txt
-# RISE(DSI)
-./tpch_bench --init_db --si -t 6 -f $lineitem1 -m 12 -i 5 -d $LevelDB_DIR > $RISE_OUTPUT/tpch_q6.txt
+# LevelDB Load Phase
+./tpch_bench --init_db -f $lineitem10 -d $LevelDB_DIR --run_query=false > $LevelDB_OUTPUT/tpch_load_data.txt
+# LevelDB Query Phase
+./tpch_bench --run_query=true -t 6 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q6.txt
+./tpch_bench --run_query=true -t 12 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q12.txt
+./tpch_bench --run_query=true -t 14 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q14.txt
+./tpch_bench --run_query=true -t 19 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q19.txt
+./tpch_bench --run_query=true -t 20 -m 0 -i 5 -d $LevelDB_DIR > $LevelDB_OUTPUT/tpch_q20.txt
 
+# LevelDB(SI) Load Phase
+./tpch_bench --init_db -f $lineitem10 -d $LevelDB_SI_DIR --run_query=false > $LevelDB_SI_OUTPUT/tpch_load_data.txt
+# LevelDB(SI) Query Phase
+./tpch_bench --run_query=true -t 6  --si -m 0 -i 5 -d $LevelDB_SI_DIR > $LevelDB_SI_OUTPUT/tpch_q6.txt
+./tpch_bench --run_query=true -t 12  --si -m 0 -i 5 -d $LevelDB_SI_DIR > $LevelDB_SI_OUTPUT/tpch_q12.txt
+./tpch_bench --run_query=true -t 14  --si -m 0 -i 5 -d $LevelDB_SI_DIR > $LevelDB_SI_OUTPUT/tpch_q14.txt
+./tpch_bench --run_query=true -t 19  --si -m 0 -i 5 -d $LevelDB_SI_DIR > $LevelDB_SI_OUTPUT/tpch_q19.txt
+./tpch_bench --run_query=true -t 20  --si -m 0 -i 5 -d $LevelDB_SI_DIR > $LevelDB_SI_OUTPUT/tpch_q20.txt
