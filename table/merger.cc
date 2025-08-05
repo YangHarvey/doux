@@ -275,6 +275,19 @@ class VMergingIterator : public Iterator {
     assert(Valid());
     current_->Next();
     if (adgMod::MOD == 10) {
+      if (!current_ || !current_->Valid()) {
+        // 如果当前迭代器无效，尝试移动到下一个有效的迭代器
+        while (pos_ < n_ && (!current_ || !current_->Valid())) {
+          ++pos_;
+          if (pos_ < n_) current_ = &children_[pos_];
+        }
+        // 如果所有迭代器都无效，将 current_ 设为 nullptr
+        if (pos_ >= n_ || !current_ || !current_->Valid()) {
+          current_ = nullptr;
+          return;
+        }
+      }
+      
       Slice cur_vkey = current_->key();
       uint64_t cur_zorder = DecodeFixed64(cur_vkey.data() + adgMod::key_size + 8);
       const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
@@ -283,24 +296,80 @@ class VMergingIterator : public Iterator {
           ++pos_;
           current_ = &children_[pos_];
         }
+        // 检查循环结束后 current_ 是否仍然有效
+        if (pos_ >= n_ || !current_ || !current_->Valid()) {
+          current_ = nullptr;
+          return;
+        }
       }
     } else if (adgMod::MOD == 9) {
-      if (!current_ || !current_->Valid()) return; // 防止悬空
+      if (!current_ || !current_->Valid()) {
+        // std::cout << "MOD 9: Current invalid, trying to switch to next child..." << std::endl;
+        // 如果当前迭代器无效，尝试移动到下一个有效的迭代器
+        while (pos_ < n_ && (!current_ || !current_->Valid())) {
+          ++pos_;
+          if (pos_ < n_) {
+            current_ = &children_[pos_];
+            // std::cout << "MOD 9 switched to child " << pos_ << ": iter=" << (current_->iter() ? "valid" : "nullptr")
+                      // << ", wrapper_valid=" << current_->Valid() << std::endl;
+          }
+        }
+        // 如果所有迭代器都无效，将 current_ 设为 nullptr
+        if (pos_ >= n_ || !current_ || !current_->Valid()) {
+          std::cout << "MOD 9: All children invalid, setting current_ to nullptr" << std::endl;
+          current_ = nullptr;
+          return;
+        }
+        // 如果成功切换到有效迭代器，继续处理
+        // std::cout << "MOD 9: Successfully switched to valid child " << pos_ << std::endl;
+      }
+      
       Slice cur_vkey = current_->key();
       // 检查 cur_vkey 是否足够大
       if (cur_vkey.size() < adgMod::key_size + 16) {
         // 直接跳过或报错
         while (pos_ < n_ && (!current_ || !current_->Valid())) {
           ++pos_;
-          if (pos_ < n_) current_ = &children_[pos_];
+          if (pos_ < n_) {
+            current_ = &children_[pos_];
+            // std::cout << "MOD 9 switched to child " << pos_ << ": iter=" << (current_->iter() ? "valid" : "nullptr")
+                      // << ", wrapper_valid=" << current_->Valid() << std::endl;
+            // 确保新切换的迭代器是有效的
+            if (!current_->Valid()) {
+              // std::cout << "MOD 9: Child " << pos_ << " is invalid, setting current_ to nullptr" << std::endl;
+              current_ = nullptr;
+            }
+          }
+        }
+        // 检查循环结束后 current_ 是否仍然有效
+        if (pos_ >= n_ || !current_ || !current_->Valid()) {
+          std::cout << "MOD 9: All children invalid, setting current_ to nullptr" << std::endl;
+          current_ = nullptr;
+          return;
         }
         return;
       }
       uint64_t cur_sort_key = DecodeFixed64(cur_vkey.data() + adgMod::key_size + 8);
       if (cur_sort_key < start_ || cur_sort_key > end_) {
+        // std::cout << "MOD 9: Sort key out of range (" << cur_sort_key << " not in [" << start_ << ", " << end_ << "]), switching..." << std::endl;
         while (pos_ < n_ && (!current_ || !current_->Valid())) {
           ++pos_;
-          if (pos_ < n_) current_ = &children_[pos_];
+          if (pos_ < n_) {
+            current_ = &children_[pos_];
+            // std::cout << "MOD 9 range switched to child " << pos_ << ": iter=" << (current_->iter() ? "valid" : "nullptr")
+                      // << ", wrapper_valid=" << current_->Valid() << std::endl;
+            // 确保新切换的迭代器是有效的
+            if (!current_->Valid()) {
+              // std::cout << "MOD 9 range: Child " << pos_ << " is invalid, setting current_ to nullptr" << std::endl;
+              current_ = nullptr;
+            }
+          }
+        }
+        // 检查循环结束后 current_ 是否仍然有效
+        if (pos_ >= n_ || !current_ || !current_->Valid()) {
+          // std::cout << "MOD 9 range: All children invalid, setting current_ to nullptr" << std::endl;
+          current_ = nullptr;
+          return;
         }
       }
     }
@@ -312,6 +381,14 @@ class VMergingIterator : public Iterator {
     if (pos_ > 0 && !current_->Valid()) {
       --pos_;
       current_ = &children_[pos_];
+      // 确保新切换的迭代器是有效的
+      if (!current_->Valid()) {
+        current_ = nullptr;
+      }
+    }
+    // 检查 current_ 是否仍然有效
+    if (!current_ || !current_->Valid()) {
+      current_ = nullptr;
     }
   }
 

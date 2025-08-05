@@ -184,6 +184,13 @@ void encodeSecondaryKey(const vector<string>& row, string* secondary_key) {
             and l_quantity < 24;
 */
 
+void delete_db(string db_location) {
+    string command = "rm -rf " + db_location;
+    system(command.c_str());
+    system("sync; echo 3 | tee /proc/sys/vm/drop_caches");
+    cout << "delete and trim complete" << endl;
+}
+
 int main(int argc, char *argv[]) {
     int num_iteration;
     string input_filename, db_location;
@@ -251,11 +258,8 @@ int main(int argc, char *argv[]) {
 
     cout << "input_filename: " << input_filename << ", fresh_write: " << fresh_write << endl;
     if (!input_filename.empty() && fresh_write) {
-        string command = "rm -rf " + db_location;
-        system(command.c_str());
-        system("sync; echo 3 | tee /proc/sys/vm/drop_caches");
-        cout << "delete and trim complete" << endl;
-
+        // delete & create db
+        delete_db(db_location);
         status = DB::Open(options, db_location, &db);
         assert(status.ok() && "Open Error");
 

@@ -136,30 +136,45 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       kvs.emplace_back(tmpKey, info);
     }
 
+    // 获取value table的min_key和max_key
+    Slice min_key, max_key;
     if (adgMod::MOD == 10 || adgMod::MOD == 13) {
       std::sort(kvs.begin(), kvs.end(), VCompare);
+      // 排序后，min_key和max_key直接取首尾
+      Slice min_key = kvs[0].first;
+      Slice max_key = kvs[kvs.size() - 1].first;
+      
+      // 后续代码使用min_key和max_key
+    } else if(adgMod::MOD == 9) {
+      // 没有排序，min_key和max_key需要遍历得到
+      Slice min_key = kvs[0].first;
+      Slice max_key = kvs[0].first;
+      for (size_t i = 1; i < kvs.size(); ++i) {
+        if (kvs[i].first.compare(min_key) < 0) min_key = kvs[i].first;
+        if (kvs[i].first.compare(max_key) > 0) max_key = kvs[i].first;
+      }
     }
 
-    TableBuilder* builder = new TableBuilder(options, vfile);
-    Slice min_key = kvs[0].first;
-    Slice max_key = kvs[kvs.size() - 1].first;
     vmeta->smallest.DecodeFrom(min_key);
     vmeta->largest.DecodeFrom(max_key);
+
+    TableBuilder* vbuilder;
+    vbuilder = new TableBuilder(options, vfile);
     for (auto& kv : kvs) {
       kv.second.file_number = static_cast<uint32_t>(vmeta->number);
-      kv.second.block_number = builder->BlockNumber();
-      kv.second.block_offset = builder->BlockOffset();
-      builder->Add(kv.first, kv.second.value);
+      kv.second.block_number = vbuilder->BlockNumber();
+      kv.second.block_offset = vbuilder->BlockOffset();
+      vbuilder->Add(kv.first, kv.second.value);
     }
 
     // Finish and check for builder errors
-    s = builder->Finish();
+    s = vbuilder->Finish();
     if (s.ok()) {
-      vmeta->file_size = builder->FileSize();
-      vmeta->num_keys = builder->NumEntries();
+      vmeta->file_size = vbuilder->FileSize();
+      vmeta->num_keys = vbuilder->NumEntries();
       assert(vmeta->file_size > 0);
     }
-    delete builder;
+    delete vbuilder;
 
     // Finish and check for file errors
     if (s.ok()) {
@@ -193,27 +208,37 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
       return s;
     }
 
+    Slice min_key, max_key;
     if (adgMod::MOD == 10 || adgMod::MOD == 13) {
       std::sort(kvs.begin(), kvs.end(), KCompare);
+      min_key = kvs[0].first;
+      max_key = kvs[kvs.size() - 1].first;
+    } else if(adgMod::MOD == 9) {
+      min_key = kvs[0].first;
+      max_key = kvs[0].first;
+      for (const auto& kv : kvs) {
+        if (kv.first.compare(min_key) < 0) min_key = kv.first;
+        if (kv.first.compare(max_key) > 0) max_key = kv.first;
+      }
     }
-
-    TableBuilder* builder = new TableBuilder(options, file);
-    Slice min_key = kvs[0].first;
-    Slice max_key = kvs[kvs.size() - 1].first;
-    if (adgMod::MOD == 10 || adgMod::MOD == 13) {
+    std::cout << "min_key: " << std::string(min_key.data(), min_key.size()) << std::endl;
+    std::cout << "max_key: " << std::string(max_key.data(), max_key.size()) << std::endl;
+    if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
       min_key.remove_suffix(8);
       max_key.remove_suffix(8);
     }
+
     meta->smallest.DecodeFrom(min_key);
     meta->largest.DecodeFrom(max_key);
 
+    TableBuilder* builder = new TableBuilder(options, file);
     for (const auto& kv : kvs) {
       Slice key = kv.first;
       char buffer[sizeof(uint32_t) * 3];
       EncodeFixed32(buffer, kv.second.file_number);
       EncodeFixed32(buffer + sizeof(uint32_t), kv.second.block_number);
       EncodeFixed32(buffer + sizeof(uint32_t) * 2, kv.second.block_offset);
-      if (adgMod::MOD == 10 || adgMod::MOD == 13) {
+      if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
         key.remove_suffix(8);
       }
       builder->Add(key, (Slice) {buffer, sizeof(uint32_t) * 3});

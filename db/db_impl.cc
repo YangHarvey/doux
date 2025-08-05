@@ -1455,7 +1455,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       compact->compaction->edit()->AddDependency(
           compact->current_voutput()->number,
           compact->compaction->vinput(0, i)->number);
-      Log(options_.info_log, "Dependency from %d to %d vfile",
+      Log(options_.info_log, "Dependency from %ld to %d vfile",
           compact->compaction->vinput(0, i)->number, 
           compact->current_voutput()->number);
     }
