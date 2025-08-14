@@ -221,8 +221,6 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
         if (kv.first.compare(max_key) > 0) max_key = kv.first;
       }
     }
-    std::cout << "min_key: " << std::string(min_key.data(), min_key.size()) << std::endl;
-    std::cout << "max_key: " << std::string(max_key.data(), max_key.size()) << std::endl;
     if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
       min_key.remove_suffix(8);
       max_key.remove_suffix(8);

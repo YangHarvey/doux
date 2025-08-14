@@ -1,10 +1,10 @@
-cd ../build_debug
-rm -rf *
-cmake ../../doux -DCMAKE_BUILD_TYPE=Debug -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
+# cd ../build_debug
+# cmake ../../doux -DCMAKE_BUILD_TYPE=Debug -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 
 
-# cd ../build
-# cmake ../../doux -DCMAKE_BUILD_TYPE=Release -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
+mkdir -p ../build
+cd ../build
+cmake ../../doux -DCMAKE_BUILD_TYPE=Release -DNDEBUG_SWITCH=ON -DLEVEL_SWITCH=ON -DINTERNAL_TIMER_SWITCH=ON
 make -j
 
 # data path
@@ -41,31 +41,33 @@ mkdir -p ${doux_output}
 mkdir -p ${rise_output}
 
 # # # leveldb
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 0 -i 5 -v 64 -d $leveldb_dir > $leveldb_output/tpch_q6_value64.txt
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 256 -d $leveldb_dir > $leveldb_output/tpch_q6_value256.txt
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 1024 -d $leveldb_dir > $leveldb_output/tpch_q6_value1024.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 0 -i 5 -v 314 -d ${leveldb_dir} > ${leveldb_output}/tpch_q6_value314.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 64 -d ${leveldb_dir} > ${leveldb_output}/tpch_q6_value64.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 256 -d ${leveldb_dir} > ${leveldb_output}/tpch_q6_value256.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 1024 -d ${leveldb_dir} > ${leveldb_output}/tpch_q6_value1024.txt
 
-# # # leveldb(SI)
+# # # # leveldb(SI)
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 64 -d $leveldb_si_dir > $leveldb_si_output/tpch_q6_value64.txt
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 256 -d $leveldb_si_dir > $leveldb_si_output/tpch_q6_value256.txt
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 0 -i 5 -v 1024 -d $leveldb_si_dir > $leveldb_si_output/tpch_q6_value1024.txt
 
-# wisckey
+# # wisckey
 # ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 8 -i 5 -v 64 -d $wisckey_dir > $wisckey_output/tpch_q6_value64.txt
 # ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 8 -i 5 -v 256 -d $wisckey_dir > $wisckey_output/tpch_q6_value256.txt
 # ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 8 -i 5 -v 1024 -d $wisckey_dir > $wisckey_output/tpch_q6_value1024.txt
 
-# # diffkv
-./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 9 -i 5 -v 64 -d $diffkv_dir > $diffkv_output/tpch_q6_value64.txt
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 9 -i 5 -v 256 -d $diffkv_dir > $diffkv_output/tpch_q6_value256.txt
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 9 -i 5 -v 1024 -d $diffkv_dir > $diffkv_output/tpch_q6_value1024.txt
+# # # diffkv
+# # ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 9 -i 5 -v 314 -d $diffkv_dir > $diffkv_output/tpch_q6_value314.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 9 -i 5 -v 64 -d $diffkv_dir > $diffkv_output/tpch_q6_value64.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 9 -i 5 -v 256 -d $diffkv_dir > $diffkv_output/tpch_q6_value256.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 9 -i 5 -v 1024 -d $diffkv_dir > $diffkv_output/tpch_q6_value1024.txt
 
-# doux
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 1 -v 64 -d $doux_dir > $doux_output/tpch_q6_value64.txt
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 1 -v 256 -d $doux_dir > $doux_output/tpch_q6_value256.txt
-# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 1 -v 1024 -d $doux_dir > $doux_output/tpch_q6_value1024.txt
+# doux 
+./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 64 -d $doux_dir > $doux_output/tpch_q6_value64.txt
+./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 256 -d $doux_dir > $doux_output/tpch_q6_value256.txt
+./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 1024 -d $doux_dir > $doux_output/tpch_q6_value1024.txt
 
-# rise(si)
+# # rise(si)
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 12 -i 5 -v 64 -d $rise_dir > $rise_output/tpch_q6_value64.txt
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 12 -i 5 -v 256 -d $rise_dir > $rise_output/tpch_q6_value256.txt
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 12 -i 5 -v 1024 -d $rise_dir > $rise_output/tpch_q6_value1024.txt
