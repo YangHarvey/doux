@@ -288,19 +288,21 @@ class VMergingIterator : public Iterator {
         }
       }
       
-      Slice cur_vkey = current_->key();
-      uint64_t cur_zorder = DecodeFixed64(cur_vkey.data() + adgMod::key_size + 8);
-      const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
-      if (!cur_interval.Contains(doux::MortonCode<2, 32>(cur_zorder))) {
-        while (pos_ < n_ && !JumpNext()) {
-          ++pos_;
-          current_ = &children_[pos_];
-        }
-        // 检查循环结束后 current_ 是否仍然有效
-        if (pos_ >= n_ || !current_ || !current_->Valid()) {
-          current_ = nullptr;
-          return;
-        }
+      // 注释掉检查cur_zorder，因为不需要检查
+      // Slice cur_vkey = current_->key();
+      // uint64_t cur_zorder = DecodeFixed64(cur_vkey.data() + cur_vkey.size() - 8);   // 获取当前的zorder
+      // const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
+      // std::cout << "cur_idx_[pos_]: " << cur_idx_[pos_] << std::endl;
+      // std::cout << "cur_interval.start_: " << cur_interval.start_ << ", cur_interval.end_: " << cur_interval.end_ << std::endl;
+      // std::cout << "cur_zorder: " << cur_zorder << std::endl;
+      while (pos_ < n_ && !JumpNext()) {
+        ++pos_;
+        current_ = &children_[pos_];
+      }
+      // 检查循环结束后 current_ 是否仍然有效
+      if (pos_ >= n_ || !current_ || !current_->Valid()) {
+        current_ = nullptr;
+        return;
       }
     } else if (adgMod::MOD == 9) {
       if (!current_ || !current_->Valid()) {

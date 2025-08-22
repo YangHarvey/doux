@@ -63,9 +63,9 @@ mkdir -p ${rise_output}
 # ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 9 -i 5 -v 1024 -d $diffkv_dir > $diffkv_output/tpch_q6_value1024.txt
 
 # doux 
-./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 64 -d $doux_dir > $doux_output/tpch_q6_value64.txt
-./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 256 -d $doux_dir > $doux_output/tpch_q6_value256.txt
-./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 1024 -d $doux_dir > $doux_output/tpch_q6_value1024.txt
+./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem1 -m 10 -i 5 -v 64 -d $doux_dir > $doux_output/tpch_q6_value64.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 256 -d $doux_dir > $doux_output/tpch_q6_value256.txt
+# ./tpch_bench_vary_value_size --init_db --run_query -t 6 -f $lineitem10 -m 10 -i 5 -v 1024 -d $doux_dir > $doux_output/tpch_q6_value1024.txt
 
 # # rise(si)
 # ./tpch_bench_vary_value_size --init_db --si --run_query -t 6 -f $lineitem10 -m 12 -i 5 -v 64 -d $rise_dir > $rise_output/tpch_q6_value64.txt

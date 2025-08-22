@@ -43,6 +43,7 @@ namespace adgMod {
     class FileStats;
 
     extern int MOD;
+    extern bool D_VOTree;
     extern bool use_dropmap;
     extern bool if_decoupled_compaction;
     extern uint32_t drop_count_gain;

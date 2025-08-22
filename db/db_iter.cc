@@ -126,6 +126,11 @@ class DBIter : public Iterator {
 #endif
       return cur_res;
     } else if (adgMod::MOD == 10) {
+      // 如果是直接访问votree, 直接返回原始value
+      if(adgMod::D_VOTree == true) {
+        return vaddr;
+      }
+
       // Check if db is still valid
       if (adgMod::db == nullptr) {
         return vaddr;  // Return raw value if db is already destroyed

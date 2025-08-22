@@ -8,6 +8,7 @@ using std::to_string;
 namespace adgMod {
 
     int MOD = 0;
+    bool D_VOTree = true;
     bool use_secondary_index = false;
 
     bool use_dropmap = false;
@@ -25,7 +26,7 @@ namespace adgMod {
     int block_restart_interval = 16;
     uint32_t test_num_level_segments = 100;
     uint32_t test_num_file_segments = 100;
-    int key_size;
+    int key_size = 32;
     int value_size;
 
     leveldb::Slice sidx_perfix = "sidx_";

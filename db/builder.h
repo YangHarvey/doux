@@ -46,26 +46,31 @@ static bool KCompare(const std::pair<Slice, VInfo>& p1, const std::pair<Slice, V
   return r < 0;
 }
 
+// Compare the key and value of the two slices
+// return true if s1 is greater than s2
+// return false if s1 is less than s2
 static bool VKSliceCompare(const Slice& s1, const Slice& s2) {
-  const size_t sz1 = s1.size(), sz2 = s2.size();
-  const Slice skey1(s1.data() + sz1 - 8, 8);
-  const Slice skey2(s2.data() + sz2 - 8, 8);
-  int r = skey1.compare(skey2);
+  const size_t size_1 = s1.size(), size_2 = s2.size();
+  // compare sort key
+  uint64_t sort_key_1 = DecodeFixed64(s1.data() + size_1 - sizeof(uint64_t));
+  uint64_t sort_key_2 = DecodeFixed64(s2.data() + size_2 - sizeof(uint64_t));
+  int r = sort_key_1 > sort_key_2 ? -1 : (sort_key_1 < sort_key_2 ? 1 : 0);
+  // if sort key is the same, compare key
   if (r == 0) {
-    const Slice ukey1(s1.data(), sz1 - 16);
-    const Slice ukey2(s2.data(), sz2 - 16);
-    r = ukey1.compare(ukey2);
+    const Slice key_1(s1.data(), size_1 - 16);
+    const Slice key_2(s2.data(), size_2 - 16);
+    r = key_1.compare(key_2);
     if (r == 0) {
-      const uint64_t num1 = DecodeFixed64(s1.data() + sz1 - 16);
-      const uint64_t num2 = DecodeFixed64(s2.data() + sz2 - 16);
+      const uint64_t num1 = DecodeFixed64(s1.data() + size_1 - 16);
+      const uint64_t num2 = DecodeFixed64(s2.data() + size_2 - 16);
       if (num1 > num2) {
-        r = -1;
+        r = 1;
       } else if (num1 < num2) {
-        r = +1;
+        r = -1;
       }
     }
   }
-  return r < 0;
+  return r > 0;
 }
 
 static bool VCompare(const std::pair<Slice, VInfo>& p1, const std::pair<Slice, VInfo>& p2) {

@@ -255,7 +255,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
       case kDependency:
         if (GetVarint64(&input, &child) && GetVarint64(&input, &parent)) {
           dep_.SetParent(parent, child);
-          std::cout << "Decode dependency: {child: " << child << " -> parent: " << parent << "}" << std::endl;
+          // std::cout << "Decode dependency: {child: " << child << " -> parent: " << parent << "}" << std::endl;
         } else {
           msg = "dependency";
         }

@@ -78,26 +78,43 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
   return s;
 }
 
+// Construct the key for the value table
+// Vkey: [key, sort key]
+// sort key = Morton code of [value1, value2]
 Slice ConstructVKey(const Slice& key, const Slice& value, Arena* arena) {
-  char* buf = arena->Allocate(key.size() + sizeof(uint64_t));
-  char* p = buf;
+  // 分配内存
   size_t key_size = key.size();
+  size_t sort_key_size = sizeof(uint64_t);
+  char* buf = arena->Allocate(key_size + sort_key_size);
+
+  // 复制key
+  char* p = buf;
   memcpy(p, key.data(), key_size);
   p += key_size;
 
-  uint32_t val1 = DecodeFixed32(value.data());
-  uint32_t val2 = DecodeFixed32(value.data() + sizeof(uint32_t));
+  // 计算sort key
+  uint32_t val1 = DecodeBigEndianFixed32(value.data());
+  uint32_t val2 = DecodeBigEndianFixed32(value.data() + sizeof(uint32_t));
   if (adgMod::MOD == 9) {
     uint64_t sort_key = val1;
     sort_key = (sort_key << 32) | val2;
     EncodeFixed64(p, sort_key);
   } else if (adgMod::MOD == 10 || adgMod::MOD == 13) {
-    doux::MortonCode<2, 32> sort_key(0);
-    sort_key.Encode({val1, val2});
-    EncodeFixed64(p, sort_key.data_);
+    auto sort_key = doux::MortonCode<2, 32>::Encode({val1, val2});
+    EncodeFixed64(p, sort_key);
   }
 
   return Slice(buf, key_size + sizeof(uint64_t));
+}
+
+void ParseVKey(const Slice& vkey) {
+  assert(vkey.size() > sizeof(uint64_t));
+  // sort key
+  Slice sort_key = Slice(vkey.data() + vkey.size() - sizeof(uint64_t), sizeof(uint64_t));
+  uint64_t sort_key_value = DecodeFixed64(sort_key.data());
+  // key
+  Slice key = Slice(vkey.data(), vkey.size() - sizeof(uint64_t));
+  std::cout << "sort_key_value: " << sort_key_value << ", key: " << key.ToString() << std::endl;
 }
 
 inline Slice ConstructSlice(const Slice& from, Arena* arena) {
@@ -141,14 +158,14 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     if (adgMod::MOD == 10 || adgMod::MOD == 13) {
       std::sort(kvs.begin(), kvs.end(), VCompare);
       // 排序后，min_key和max_key直接取首尾
-      Slice min_key = kvs[0].first;
-      Slice max_key = kvs[kvs.size() - 1].first;
+      min_key = kvs[0].first;
+      max_key = kvs[kvs.size() - 1].first;
       
       // 后续代码使用min_key和max_key
     } else if(adgMod::MOD == 9) {
       // 没有排序，min_key和max_key需要遍历得到
-      Slice min_key = kvs[0].first;
-      Slice max_key = kvs[0].first;
+      min_key = kvs[0].first;
+      max_key = kvs[0].first;
       for (size_t i = 1; i < kvs.size(); ++i) {
         if (kvs[i].first.compare(min_key) < 0) min_key = kvs[i].first;
         if (kvs[i].first.compare(max_key) > 0) max_key = kvs[i].first;
@@ -186,7 +203,6 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     delete vfile;
     vfile = nullptr;
 
-    // std::cout << "Write VSST " << vfname << " to L0 successfully!" << std::endl;
   }
 
   // Check for input iterator errors

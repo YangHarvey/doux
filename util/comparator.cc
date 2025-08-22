@@ -103,23 +103,27 @@ class VKeyComparatorImpl : public Comparator {
 
   virtual const char* Name() const { return "leveldb.VKeyComparator"; }
 
+  // return true if key1 is greater than key2
+  // return false if key1 is less than key2
   virtual int Compare(const Slice& key1, const Slice& key2) const {
-    int sz1 = key1.size(), sz2 = key2.size();
-    assert(sz1 >= 16 && sz2 >= 16);
-    const Slice skey1(key1.data() + sz1 - 8, 8);
-    const Slice skey2(key2.data() + sz2 - 8, 8);
-    int r = skey1.compare(skey2);
+    int size_1 = key1.size(), size_2 = key2.size();
+    assert(size_1 >= 16 && size_2 >= 16);
+    // std::cout << "key1: " << key1.ToString() << ", key2: " << key2.ToString() << std::endl;
+    // std::cout << "key1.size(): " << size_1 << ", key2.size(): " << size_2 << std::endl;
+    uint64_t sort_key_1 = DecodeFixed64(key1.data() + size_1 - sizeof(uint64_t));
+    uint64_t sort_key_2 = DecodeFixed64(key2.data() + size_2 - sizeof(uint64_t));
+    int r = sort_key_1 > sort_key_2 ? 1 : (sort_key_1 < sort_key_2 ? -1 : 0);
     if (r == 0) {
-      const Slice ukey1(key1.data(), sz1 - 16);
-      const Slice ukey2(key2.data(), sz2 - 16);
+      const Slice ukey1(key1.data(), size_1 - 16);
+      const Slice ukey2(key2.data(), size_2 - 16);
       r = ukey1.compare(ukey2);
       if (r == 0) {
-        const uint64_t num1 = DecodeFixed64(key1.data() + sz1 - 16);
-        const uint64_t num2 = DecodeFixed64(key2.data() + sz2 - 16);
+        const uint64_t num1 = DecodeFixed64(key1.data() + size_1 - 16);
+        const uint64_t num2 = DecodeFixed64(key2.data() + size_2 - 16);
         if (num1 > num2) {
-          r = -1;
+          r = 1;
         } else if (num1 < num2) {
-          r = +1;
+          r = -1;
         }
       }
     }

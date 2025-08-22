@@ -8,6 +8,7 @@
 #include <random>
 #include <ctime>
 #include <time.h>
+#include "db/builder.h"
 #include "tpch_base.h"
 #include "leveldb/db.h"
 #include "leveldb/comparator.h"
@@ -60,10 +61,12 @@ void EncodeRow(const vector<string>& row, string* key, string* value, int value_
     // [shipdate, quantity, l_receiptdate]作为前三个属性
     uint32_t shipdate = 0;
     shipdate = uniformDate(row[l_shipdate].c_str());
+    // std::cout << "shipdate: " << shipdate << std::endl;
     PutBigEndianFixed32(value, shipdate);
 
     uint32_t quantity = 0;
     quantity = std::stoul(row[l_quantity].c_str(), nullptr, 10);
+    // std::cout << "quantity: " << quantity << std::endl;
     PutBigEndianFixed32(value, quantity);
 
     uint32_t receiptdate = 0;
@@ -223,10 +226,10 @@ int main(int argc, char *argv[]) {
             ("predefined_range", "use predefined range", cxxopts::value<bool>(predefined_range)->default_value("false"))
             ("si", "use secondary index", cxxopts::value<bool>(adgMod::use_secondary_index)->default_value("false"))
             ("filter", "use filter", cxxopts::value<bool>(adgMod::use_filter)->default_value("false"))
-            ("start1", "start for attribute 1", cxxopts::value<uint32_t>(start1)->default_value("1"))
-            ("end1", "end for attribute 1", cxxopts::value<uint32_t>(end1)->default_value("1850"))
-            ("start2", "start for attribute 2", cxxopts::value<uint32_t>(start2)->default_value("1"))
-            ("end2", "end for attribute 2", cxxopts::value<uint32_t>(end2)->default_value("950"))
+            ("start1", "start for attribute 1", cxxopts::value<uint32_t>(start1)->default_value("143"))
+            ("end1", "end for attribute 1", cxxopts::value<uint32_t>(end1)->default_value("180"))
+            ("start2", "start for attribute 2", cxxopts::value<uint32_t>(start2)->default_value("3"))
+            ("end2", "end for attribute 2", cxxopts::value<uint32_t>(end2)->default_value("5"))
             ("v, value_size", "value size", cxxopts::value<int>(adgMod::value_size)->default_value("314"));
 
     auto result = commandline_options.parse(argc, argv);
@@ -419,14 +422,6 @@ int main(int argc, char *argv[]) {
                     }
                     instance->PauseTimer(17);
                 } else if (adgMod::MOD == 10) {
-                    uint64_t scan_len = 0;
-                    cout << "Morton code from " << read_options.start << " to "  << read_options.end << endl;
-                    for (const auto interval : region.intervals_) {
-                        // cout << "interval from " << interval.start_ << " to " << interval.end_ << endl;
-                        scan_len += interval.end_ - interval.start_;
-                    }
-                    cout << "scan length: " << scan_len << endl;
-
                     for(const auto interval : region.intervals_) {
                         read_options.start = interval.start_;
                         read_options.end = interval.end_;
@@ -440,9 +435,14 @@ int main(int argc, char *argv[]) {
                             Slice key = db_iter->key();
                             Slice value = db_iter->value();
                             ++res_count;
+                            if(VKSliceCompare(key, Slice(reinterpret_cast<const char*>(&interval.start_), sizeof(uint64_t)))) {
+                                break;
+                            }
                         }
+                        std::cout << "res_count: " << res_count << std::endl;
                         instance->PauseTimer(17);
                     }
+                    std::cout << "res_count: " << res_count << std::endl;
                     // db_iter = db->NewVIterator(read_options);
                     // instance->StartTimer(4);
                     // db_iter->Seek(Slice());
