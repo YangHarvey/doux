@@ -7,6 +7,8 @@
 
 #include <string>
 #include <iostream>
+#include <execinfo.h>
+#include <cstdlib>
 
 #include "leveldb/export.h"
 #include "util/coding.h"
@@ -98,7 +100,18 @@ class InternalKey {
 
   void DecodeFrom(const Slice& s) { rep_.assign(s.data(), s.size()); }
   Slice Encode() const {
-    assert(!rep_.empty());
+    if (rep_.empty()) {
+      std::cerr << "ERROR: InternalKey::Encode() called with empty rep_!" << std::endl;
+      std::cerr << "Call stack:" << std::endl;
+      void* array[20];
+      size_t size = backtrace(array, 20);
+      char** strings = backtrace_symbols(array, size);
+      for (size_t i = 0; i < size; i++) {
+        std::cerr << "  " << strings[i] << std::endl;
+      }
+      free(strings);
+      abort();
+    }
     return rep_;
   }
 

@@ -598,19 +598,24 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     }
     edit->AddFile(level, meta.number, meta.file_size, meta.smallest,
                   meta.largest);
-    edit->AddVFile(vlevel, vmeta.number, vmeta.file_size, vmeta.smallest,
-                   vmeta.largest);
+    // Only add vfile for modes that use vfile (MOD == 9, 10, or 13)
+    if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
+      edit->AddVFile(vlevel, vmeta.number, vmeta.file_size, vmeta.smallest,
+                     vmeta.largest);
+
+      if (!adgMod::fresh_write) {
+        adgMod::vfile_stats_mutex.Lock();
+        assert(adgMod::vfile_stats.find(vmeta.number) == adgMod::vfile_stats.end());
+        adgMod::vfile_stats.insert({vmeta.number, adgMod::FileStats(level, vmeta.file_size)});
+        adgMod::vfile_stats_mutex.Unlock();
+      }
+    }
 
     if (!adgMod::fresh_write) {
       adgMod::file_stats_mutex.Lock();
       assert(adgMod::file_stats.find(meta.number) == adgMod::file_stats.end());
       adgMod::file_stats.insert({meta.number, adgMod::FileStats(level, meta.file_size)});
       adgMod::file_stats_mutex.Unlock();
-
-      adgMod::vfile_stats_mutex.Lock();
-      assert(adgMod::vfile_stats.find(vmeta.number) == adgMod::vfile_stats.end());
-      adgMod::vfile_stats.insert({vmeta.number, adgMod::FileStats(level, vmeta.file_size)});
-      adgMod::vfile_stats_mutex.Unlock();
     }
 
 
@@ -1438,16 +1443,22 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     compact->compaction->edit()->AddFile(level + 1, out.number, out.file_size,
                                          out.smallest, out.largest);
   }
-  for (size_t i = 0; i < compact->voutputs.size(); i++) {
-    const CompactionState::Output& out = compact->voutputs[i];
-    int next_level = level + 1;
-    if (adgMod::MOD == 10) {
-      next_level = compact->compaction->num_input_vfiles(1) > 0 ? 1 : 0;
-    } else if (adgMod::MOD == 13) {
-      next_level = compact->compaction->num_input_vfiles(1);
+  // Only process voutputs for modes that use vfile (MOD == 9, 10, or 13)
+  if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
+    for (size_t i = 0; i < compact->voutputs.size(); i++) {
+      const CompactionState::Output& out = compact->voutputs[i];
+      // Only add vfile if file_size > 0, otherwise smallest/largest may be empty
+      if (out.file_size > 0) {
+        int next_level = level + 1;
+        if (adgMod::MOD == 10) {
+          next_level = compact->compaction->num_input_vfiles(1) > 0 ? 1 : 0;
+        } else if (adgMod::MOD == 13) {
+          next_level = compact->compaction->num_input_vfiles(1);
+        }
+        compact->compaction->edit()->AddVFile(next_level, out.number, out.file_size,
+                                              out.smallest, out.largest);
+      }
     }
-    compact->compaction->edit()->AddVFile(next_level, out.number, out.file_size,
-                                          out.smallest, out.largest);
   }
 
   if (adgMod::MOD == 10 && compact->compaction->num_input_vfiles(1) == 0) {

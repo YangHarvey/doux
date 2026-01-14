@@ -72,21 +72,21 @@ inline void splitRow(const string& src, vector<string>& res, string delim = "|")
     }
 }
 
-inline uint32_t gapDays(const string& date1, const string& date2) {
+inline double gapDays(const string& date1, const string& date2) {
     std::tm tm1, tm2;
     std::memset(&tm1, 0, sizeof(tm1));
     std::memset(&tm2, 0, sizeof(tm2));
     strptime(date1.data(), "%Y-%m-%d", &tm1);
     strptime(date2.data(), "%Y-%m-%d", &tm2);
-    uint32_t gapSecs = static_cast<uint32_t>(std::difftime(std::mktime(&tm2), std::mktime(&tm1)));
+    double gapSecs = static_cast<double>(std::difftime(std::mktime(&tm2), std::mktime(&tm1)));
     return gapSecs / 86400;
 }
 
-inline uint32_t uniformDate(const string& cur_date) {
-    uint32_t all_days = gapDays(start_date, end_date);
-    uint32_t cur_days = gapDays(start_date, cur_date);
-    return cur_days * 1000 / all_days;
-} 
+inline double uniformDate(const string& cur_date) {
+    double all_days = gapDays(start_date, end_date);
+    double cur_days = gapDays(start_date, cur_date);
+    return cur_days / all_days;
+}
 
 
 constexpr size_t sk_shipdate_offset = 8;
