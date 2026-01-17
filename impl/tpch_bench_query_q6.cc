@@ -107,8 +107,7 @@ int main(int argc, char *argv[]) {
                 double shipdate = deserialize_val(value, l_shipdate);
                 double quantity = deserialize_val(value, l_quantity);
 
-                std::cout << "shipdate: " << shipdate << ", quantity: " << quantity << std::endl;
-                if(shipdate > low[0] && shipdate < high[0] && quantity > low[1] && quantity < high[1]) {
+                if(shipdate >= low[0] && shipdate <= high[0] && quantity >= low[1] && quantity <= high[1]) {
                     ++res_count;
                 }
             }
