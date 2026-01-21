@@ -1457,7 +1457,18 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       if (out.file_size > 0) {
     int next_level = level + 1;
     if (adgMod::MOD == 10) {
-      next_level = compact->compaction->num_input_vfiles(1) > 0 ? 1 : 0;
+      // 修改逻辑：当有 Level 1 输入或者 Level 0 文件过多时，输出到 Level 1
+      // 否则输出到 Level 0（仅合并小文件）
+      if (compact->compaction->num_input_vfiles(1) > 0) {
+        // 有 Level 1 输入，说明是跨层 compaction，输出到 Level 1
+        next_level = 1;
+      } else if (compact->compaction->num_input_vfiles(0) >= 8) {
+        // Level 0 输入文件过多（>= 8 个），即使没有 Level 1 输入，也要输出到 Level 1
+        next_level = 1;
+      } else {
+        // 只合并少量 Level 0 的小文件，输出回 Level 0
+        next_level = 0;
+      }
     } else if (adgMod::MOD == 13) {
       next_level = compact->compaction->num_input_vfiles(1);
     }
@@ -1855,8 +1866,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 }
 
 Status DBImpl::DoVCompactionWork(CompactionState* compact) {
-  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
-
   Log(options_.info_log, "Compacting %d@%d + %d@%d vfiles",
       compact->compaction->num_input_vfiles(0), compact->compaction->level(),
       compact->compaction->num_input_vfiles(1), compact->compaction->level() + 1);
@@ -1924,45 +1933,33 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     }
   }
 
+  // Validation Phase 已注释，直接将 key_map 转为 kvs
   for (const auto& map_it : key_map) {
     const ParsedInternalKey& ikey = map_it.second.first;
     if (ikey.type != kTypeDeletion) {
       Slice vkey(ikey.user_key.data(), ikey.user_key.size() + 16);
-
-      // Validation Phase
-      if(!adgMod::use_dropmap) {
-        string lsm_value;
-        Status lsm_status = Get(ReadOptions(), ikey.user_key, &lsm_value);
-        if(!lsm_status.ok()) {
-          Log(options_.info_log, "Key %s not found in LSM-tree, skipping.", ikey.user_key.ToString().c_str());
-          continue;
-        }
-      } else {
-        // use dropmap
-        if(drop_map.find(std::string(ikey.user_key.data(), ikey.user_key.size())) == drop_map.end() && rand() % 3 == 0) {
-          string lsm_value;
-          Status lsm_status = PreGet(ReadOptions(), ikey.user_key, &lsm_value);
-          if(!lsm_status.ok()) {
-            Log(options_.info_log, "Key %s not found in LSM-tree, skipping.", ikey.user_key.ToString().c_str());
-            continue;
-          }
-        } {
-          adgMod::drop_count_gain++;
-        }
-      }
-
       kvs.push_back({vkey, map_it.second.second});
     }
   }
 
-  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
+  // 检查是否有有效的 KV 对
+  if (kvs.empty()) {
+    key_map.clear();
+    kvs.clear();
+    
+    mutex_.Lock();
+    // 即使没有输出文件，也要删除输入文件
+    compact->compaction->AddVInputDeletions(compact->compaction->edit());
+    if (status.ok()) {
+      status = versions_->LogAndApply(compact->compaction->edit(), &mutex_);
+    }
+    return status;
+  }
 
   status = OpenCompactionVOutputFile(compact);
   if (!status.ok()) {
     return status;
   }
-
-  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
   // sort keys
   if (adgMod::MOD == 10 || adgMod::MOD == 13) {
@@ -1981,13 +1978,10 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     compact->vbuilder->Add(kvs[i].first, kvs[i].second);
   }
 
-  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
-
   status = FinishCompactionVOutputFile(compact);
+  
   key_map.clear();
   kvs.clear();
-
-  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
   mutex_.Lock();
   if (status.ok()) {
@@ -2426,12 +2420,12 @@ Iterator* DBImpl::NewVIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
   uint32_t seed;
   Iterator* iter = NewVInternalIterator(options, &latest_snapshot, &seed);
-  return NewDBIterator(this, user_comparator(), iter,
-                       (options.snapshot != nullptr
-                            ? static_cast<const SnapshotImpl*>(options.snapshot)
-                                  ->sequence_number()
-                            : latest_snapshot),
-                       seed);
+  return NewDBVIterator(this, user_comparator(), iter,
+                        (options.snapshot != nullptr
+                             ? static_cast<const SnapshotImpl*>(options.snapshot)
+                                   ->sequence_number()
+                             : latest_snapshot),
+                        seed);
 }
 
 void DBImpl::RecordReadSample(Slice key) {

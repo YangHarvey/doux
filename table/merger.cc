@@ -4,7 +4,7 @@
 
 #include "table/merger.h"
 
-
+#include <iostream>
 #include "leveldb/comparator.h"
 #include "leveldb/iterator.h"
 #include "table/iterator_wrapper.h"
@@ -205,7 +205,7 @@ class VMergingIterator : public Iterator {
     doux::AABB<2, 32> aabb = {big_min_, limit_max_};
     region_ = aabb.ToIntervals();
     cur_vkey_ = new char[adgMod::key_size + 16];
-    cur_idx_.resize(n, 0);  // 正确初始化 vector
+    cur_idx_.resize(n, 0);
   }
 
   virtual ~VMergingIterator() { 
@@ -246,15 +246,16 @@ class VMergingIterator : public Iterator {
         }
       }
     } else if (adgMod::MOD == 10) {
-      EncodeFixed64(cur_vkey_, 0);
-      EncodeFixed64(cur_vkey_ + 8, 0);  // user key
-      EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));  // sequence number
+      // 对于 MOD==10，将所有 children 都 Seek 到各自的第一个有效 interval
       for (int i = 0; i < n_; i++) {
-        EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[i]].start_);  // sort key
-        Slice vkey(cur_vkey_, adgMod::key_size + 16);
-        children_[i].Seek(vkey);
-        // 不再 Next()，Seek 到的位置就是区间起点
+        pos_ = i;
+        current_ = &children_[i];
+        SeekToFirstInterval();  // 不管成功与否都执行，失败的会标记为 invalid
       }
+      // 找到所有 valid children 中 sort_key 最小的那个
+      FindSmallest();
+      direction_ = kForward;
+      return;
     }
 
     for (int i = 0; i < n_; i++) {
@@ -269,62 +270,37 @@ class VMergingIterator : public Iterator {
 
   virtual void Next() {
     assert(Valid());
-    current_->Next();
     if (adgMod::MOD == 10) {
-      if (!current_ || !current_->Valid()) {
-        // 当前迭代器失效，切换到下一个 child
-        while (pos_ < n_ && (!current_ || !current_->Valid())) {
-          ++pos_;
-          if (pos_ < n_) current_ = &children_[pos_];
+
+      // current_ 下移一步
+      current_->Next();
+      if(current_->Valid()) {
+        // 如果current不在当前的interval， 则跳转到下一个interval
+        auto sort_key = DecodeFixed64(current_->key().data() + current_->key().size() - 8);
+        auto interval = region_.intervals_[cur_idx_[pos_]];
+        if(sort_key > interval.end_) {
+          JumpNext();
         }
-        if (pos_ >= n_ || !current_ || !current_->Valid()) {
-          current_ = nullptr;
-          return;
-        }
-      } else {
-        // current_ 还 valid，检查是否还在当前区间内
-        Slice cur_vkey = current_->key();
-        if (cur_vkey.size() >= 8 && cur_idx_[pos_] < region_.intervals_.size()) {
-          uint64_t cur_sort_key = DecodeFixed64(cur_vkey.data() + cur_vkey.size() - 8);
-          const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
-          
-          if (cur_sort_key > cur_interval.end_) {
-            // 超出当前区间，跳到下一个区间
-            while (pos_ < n_ && !JumpNext()) {
-              ++pos_;
-              if (pos_ < n_) {
-                current_ = &children_[pos_];
-                cur_idx_[pos_] = 0;  // 重置新 child 的区间索引
-              }
-            }
-            if (pos_ >= n_ || !current_ || !current_->Valid()) {
-              current_ = nullptr;
-              return;
-            }
-          }
-          // 否则还在区间内，直接返回
-        }
+      } else if (!current_->Valid()) {
+        // 不处理,findsmallest会自动跳过它
       }
+      FindSmallest();
+
     } else if (adgMod::MOD == 9) {
+      current_->Next();
       if (!current_ || !current_->Valid()) {
-        // std::cout << "MOD 9: Current invalid, trying to switch to next child..." << std::endl;
         // 如果当前迭代器无效，尝试移动到下一个有效的迭代器
         while (pos_ < n_ && (!current_ || !current_->Valid())) {
           ++pos_;
           if (pos_ < n_) {
             current_ = &children_[pos_];
-            // std::cout << "MOD 9 switched to child " << pos_ << ": iter=" << (current_->iter() ? "valid" : "nullptr")
-                      // << ", wrapper_valid=" << current_->Valid() << std::endl;
           }
         }
         // 如果所有迭代器都无效，将 current_ 设为 nullptr
         if (pos_ >= n_ || !current_ || !current_->Valid()) {
-          std::cout << "MOD 9: All children invalid, setting current_ to nullptr" << std::endl;
           current_ = nullptr;
           return;
         }
-        // 如果成功切换到有效迭代器，继续处理
-        // std::cout << "MOD 9: Successfully switched to valid child " << pos_ << std::endl;
       }
       
       Slice cur_vkey = current_->key();
@@ -346,7 +322,7 @@ class VMergingIterator : public Iterator {
         }
         // 检查循环结束后 current_ 是否仍然有效
         if (pos_ >= n_ || !current_ || !current_->Valid()) {
-          std::cout << "MOD 9: All children invalid, setting current_ to nullptr" << std::endl;
+          // std::cout << "MOD 9: All children invalid, setting current_ to nullptr" << std::endl;
           current_ = nullptr;
           return;
         }
@@ -373,6 +349,20 @@ class VMergingIterator : public Iterator {
           // std::cout << "MOD 9 range: All children invalid, setting current_ to nullptr" << std::endl;
           current_ = nullptr;
           return;
+        }
+      }
+    } else {
+      // 默认行为：其他 MOD
+      current_->Next();
+      if (!current_->Valid()) {
+        while (pos_ < n_ && (!current_ || !current_->Valid())) {
+          ++pos_;
+          if (pos_ < n_) {
+            current_ = &children_[pos_];
+          }
+        }
+        if (pos_ >= n_ || !current_ || !current_->Valid()) {
+          current_ = nullptr;
         }
       }
     }
@@ -417,22 +407,102 @@ class VMergingIterator : public Iterator {
   }
 
  private:
+  // 从所有 valid children 中找到 sort_key 最小的那个，设置为 current_
+  void FindSmallest() {
+    IteratorWrapper* smallest = nullptr;
+    int smallest_pos = -1;
+    uint64_t smallest_sort_key = UINT64_MAX;
+    
+    for (int i = 0; i < n_; i++) {
+      if (cur_idx_[i] < region_.intervals_.size() && children_[i].Valid()) {
+        Slice vkey = children_[i].key();
+        assert(vkey.size() >= 8);
+
+        uint64_t sort_key = DecodeFixed64(vkey.data() + vkey.size() - 8);
+
+        const auto& interval = region_.intervals_[cur_idx_[i]];
+        assert(sort_key >= interval.start_ && sort_key <= interval.end_);
+        if (sort_key < smallest_sort_key || 
+            (sort_key == smallest_sort_key && (smallest == nullptr || comparator_->Compare(vkey, smallest->key()) < 0))) {
+          smallest = &children_[i];
+          smallest_pos = i;
+          smallest_sort_key = sort_key;
+        }
+      }
+    }
+    
+    if (smallest != nullptr) {
+      current_ = smallest;
+      pos_ = smallest_pos;
+      // std::cout << "[FindSmallest] Selected pos_=" << pos_ << ", sort_key=" << smallest_sort_key << std::endl;
+    } else {
+      current_ = nullptr;
+      // std::cout << "[FindSmallest] No valid child found, all exhausted" << std::endl;
+    }
+  }
+
+  bool SeekToFirstInterval() {
+    // 对当前 child 从第一个区间开始查找有效数据
+    // std::cout << "[SeekToFirstInterval] Starting at pos_=" << pos_ << std::endl;
+    cur_idx_[pos_] = 0;
+    while (cur_idx_[pos_] < region_.intervals_.size()) {
+      const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
+      // std::cout << "[SeekToFirstInterval] Trying interval[" << cur_idx_[pos_] 
+      //           << "] start=" << cur_interval.start_ 
+      //           << ", end=" << cur_interval.end_ << std::endl;
+      EncodeFixed64(cur_vkey_, 0);
+      EncodeFixed64(cur_vkey_ + 8, 0);
+      EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
+      EncodeFixed64(cur_vkey_ + 24, cur_interval.start_);
+      // 在当前 pos_ 对应的 child 上 Seek
+      children_[pos_].Seek({cur_vkey_, static_cast<size_t>(adgMod::key_size + 16)});
+      
+      if (children_[pos_].Valid()) {
+        // 验证找到的数据的 sort key 是否在当前 interval 范围内
+        Slice found_vkey = children_[pos_].key();
+        if (found_vkey.size() >= 8) {
+          uint64_t found_sort_key = DecodeFixed64(found_vkey.data() + found_vkey.size() - 8);
+          if (found_sort_key <= cur_interval.end_) {
+            // std::cout << "[SeekToFirstInterval] Found valid data at pos_=" << pos_ 
+            //           << ", cur_idx_=" << cur_idx_[pos_] 
+            //           << ", sort_key=" << found_sort_key << std::endl;
+            return true;
+          } else {
+            // std::cout << "[SeekToFirstInterval] Found data but sort_key=" << found_sort_key 
+            //           << " exceeds interval end=" << cur_interval.end_ << std::endl;
+          }
+        }
+      }
+      // std::cout << "[SeekToFirstInterval] No data in interval[" << cur_idx_[pos_] << "]" << std::endl;
+      cur_idx_[pos_]++;
+    }
+    // std::cout << "[SeekToFirstInterval] No valid interval found at pos_=" << pos_ << std::endl;
+    return false;
+  }
+
   bool JumpNext() {
+    // pos_所在child跳到下一个interval
     EncodeFixed64(cur_vkey_, 0);
     EncodeFixed64(cur_vkey_ + 8, 0);
     EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
     cur_idx_[pos_]++;
     while (cur_idx_[pos_] < region_.intervals_.size()) {
       const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
-      EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[pos_]].start_);
-      current_->Seek({cur_vkey_, static_cast<size_t>(adgMod::key_size + 16)});
-      if (current_->Valid()) {
+      EncodeFixed64(cur_vkey_ + 24, cur_interval.start_);
+      // 在当前 pos_ 对应的 child 上 Seek
+      children_[pos_].Seek({cur_vkey_, static_cast<size_t>(adgMod::key_size + 16)});
+      if (children_[pos_].Valid()) {
+        // 验证找到的数据的 sort key 是否在当前 interval 范围内
+        Slice found_vkey = children_[pos_].key();
+        assert(found_vkey.size() >= 8);
+        uint64_t found_sort_key = DecodeFixed64(found_vkey.data() + found_vkey.size() - 8);
+        assert(found_sort_key <= cur_interval.end_);
         // 不再 Next()，Seek 到的位置就是下一个区间的起点
         break;
       }
       cur_idx_[pos_]++;  // 这个区间也没数据，继续下一个
     }
-    if (!current_->Valid()) {
+    if (!children_[pos_].Valid() || cur_idx_[pos_] >= region_.intervals_.size()) {
       return false;
     }
     return true;

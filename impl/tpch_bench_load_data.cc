@@ -64,7 +64,7 @@ void EncodeRow(const vector<string>& rows, string* pkey, string* vkey, string *s
         double quantity = std::stod(rows[l_quantity].c_str());
         if(adgMod::MOD == 10 || adgMod::MOD == 13) {
             // doux
-            uint32_t val1 = shipdate * 10000;
+            uint32_t val1 = shipdate * 100;
             uint32_t val2 = quantity;
             auto sort_key = doux::MortonCode<2, 32>::Encode({val1, val2});
             uint64_t sk = static_cast<uint64_t>(sort_key);

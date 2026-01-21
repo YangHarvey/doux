@@ -21,6 +21,12 @@ Iterator* NewDBIterator(DBImpl* db, const Comparator* user_key_comparator,
                         Iterator* internal_iter, SequenceNumber sequence,
                         uint32_t seed);
 
+// Return a new iterator for VIterator that handles vkey format
+// (user_key + sequence(8) + sort_key(8))
+Iterator* NewDBVIterator(DBImpl* db, const Comparator* user_key_comparator,
+                         Iterator* internal_iter, SequenceNumber sequence,
+                         uint32_t seed);
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_DB_DB_ITER_H_

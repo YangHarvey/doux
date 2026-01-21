@@ -266,6 +266,10 @@ void Version::AddIterators(const ReadOptions& options,
 
 void Version::AddVIterators(const ReadOptions& options,
                             std::vector<Iterator*>* iters) {
+  std::cout << "[AddVIterators] Building iterator list:" << std::endl;
+  
+  // Level 0
+  std::cout << "  Level 0: " << vfiles_[0].size() << " files" << std::endl;
   for (size_t i = 0; i < vfiles_[0].size(); i++) {
     FileMetaData* vf = vfiles_[0][i];
     Iterator* it = nullptr;
@@ -285,6 +289,7 @@ void Version::AddVIterators(const ReadOptions& options,
       it = vtables_[vf->number]->NewVIterator(options);
     }
     if (it != nullptr) {
+      std::cout << "    [" << iters->size() << "] Level=0, FileNum=" << vf->number << std::endl;
       iters->push_back(it);
     }
   }
@@ -292,6 +297,7 @@ void Version::AddVIterators(const ReadOptions& options,
   int max_level = adgMod::MOD == 10 ? 2 : config::kNumLevels;
   const Comparator* vkcmp = VKeyComparator();
   for (int level = 1; level < max_level; level++) {
+    std::cout << "  Level " << level << ": " << vfiles_[level].size() << " files" << std::endl;
     for (int i = 0; i < vfiles_[level].size(); i++) {
       FileMetaData* vf = vfiles_[level][i];
       if (adgMod::MOD == 10) {
@@ -299,6 +305,9 @@ void Version::AddVIterators(const ReadOptions& options,
         ParseInternalVKey(vf->smallest.Encode(), &iSmallest);
         ParseInternalVKey(vf->largest.Encode(), &iLargest);
         if (options.start > iLargest.sort_key || options.end < iSmallest.sort_key) {
+          std::cout << "    Skip FileNum=" << vf->number << " (range [" << iSmallest.sort_key 
+                    << ", " << iLargest.sort_key << "] outside query [" 
+                    << options.start << ", " << options.end << "])" << std::endl;
           continue;
         }
       }
@@ -320,10 +329,16 @@ void Version::AddVIterators(const ReadOptions& options,
         it = vtables_[vf->number]->NewVIterator(options);
       }
       if (it != nullptr) {
+        ParsedInternalKey iSmallest, iLargest;
+        ParseInternalVKey(vf->smallest.Encode(), &iSmallest);
+        ParseInternalVKey(vf->largest.Encode(), &iLargest);
+        std::cout << "    [" << iters->size() << "] Level=" << level << ", FileNum=" << vf->number 
+                  << ", range=[" << iSmallest.sort_key << ", " << iLargest.sort_key << "]" << std::endl;
         iters->push_back(it);
       }
     }
   }
+  std::cout << "  Total iterators: " << iters->size() << std::endl << std::endl;
 }
 
 // Callback from TableCache::Get()
@@ -1878,8 +1893,13 @@ Compaction* VersionSet::PickCompaction() {
 
 Compaction* VersionSet::PickVCompaction() {
   Compaction* c;
-  // const bool level_compaction = (Compaction::merge_num_ % adgMod::level_compaction_limit == 0);
-  const bool level_compaction = false;
+  // Level compaction 触发条件：Level 0 文件数 >= 8 个
+  // 目的：将 Level 0 文件移动到 Level 1，减少 Level 0 文件重叠
+  const int kL0VFileCompactionTrigger = 8;
+  const bool level_compaction = (current_->vfiles_[0].size() >= kL0VFileCompactionTrigger);
+  
+  // Size compaction 触发条件：小文件数量过多
+  // 目的：合并小文件，减少文件碎片
   int cur_small_file = 0;
   for (int i = 0; i < current_->vfiles_[0].size(); i++) {
     if (current_->vfiles_[0][i]->file_size < adgMod::max_merged_size) {

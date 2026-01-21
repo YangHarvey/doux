@@ -118,8 +118,8 @@ int main(int argc, char *argv[]) {
         {
             uint64_t res_count = 0;
 
-            read_options.start1 = low[0];
-            read_options.end1 = high[0];
+            read_options.start1 = low[0] * 100;
+            read_options.end1 = high[0] * 100;
             read_options.start2 = low[1];
             read_options.end2 = high[1];
 

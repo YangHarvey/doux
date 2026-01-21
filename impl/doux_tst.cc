@@ -20,11 +20,10 @@ static bool InIntervals(const doux::Region<2, 32>& region, uint64_t code) {
 
 int main() {
   // tpch_q6: shipdate in [0.143192, 0.285994], quantity in [0, 24]
-  const uint32_t shipdate_start = static_cast<uint32_t>(0.143192 * 10000);
-  const uint32_t shipdate_end = static_cast<uint32_t>(0.285994 * 10000);
+  const uint32_t shipdate_start = static_cast<uint32_t>(0.14 * 100);
+  const uint32_t shipdate_end = static_cast<uint32_t>(0.28 * 100);
   const uint32_t quantity_start = 0;
   const uint32_t quantity_end = 24;
-
   const uint32_t x_min = std::min(shipdate_start, shipdate_end);
   const uint32_t x_max = std::max(shipdate_start, shipdate_end);
   const uint32_t y_min = std::min(quantity_start, quantity_end);
