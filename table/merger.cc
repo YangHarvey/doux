@@ -194,6 +194,7 @@ class VMergingIterator : public Iterator {
       children_[i].Set(children[i]);
     }
 
+    options_ = options;  // 保存 options
     start_ = options.start1;
     start_ = (start_ << 32) | options.start2;
     end_ = options.end1;
@@ -204,10 +205,7 @@ class VMergingIterator : public Iterator {
     doux::AABB<2, 32> aabb = {big_min_, limit_max_};
     region_ = aabb.ToIntervals();
     cur_vkey_ = new char[adgMod::key_size + 16];
-    cur_idx_.reserve(n);
-    for (int i = 0; i < n; i++) {
-      cur_idx_[i] = 0;
-    }
+    cur_idx_.resize(n, 0);  // 正确初始化 vector
   }
 
   virtual ~VMergingIterator() { 
@@ -255,9 +253,7 @@ class VMergingIterator : public Iterator {
         EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[i]].start_);  // sort key
         Slice vkey(cur_vkey_, adgMod::key_size + 16);
         children_[i].Seek(vkey);
-        if (children_[i].Valid()) {
-          children_[i].Next();
-        }
+        // 不再 Next()，Seek 到的位置就是区间起点
       }
     }
 
@@ -276,33 +272,38 @@ class VMergingIterator : public Iterator {
     current_->Next();
     if (adgMod::MOD == 10) {
       if (!current_ || !current_->Valid()) {
-        // 如果当前迭代器无效，尝试移动到下一个有效的迭代器
+        // 当前迭代器失效，切换到下一个 child
         while (pos_ < n_ && (!current_ || !current_->Valid())) {
           ++pos_;
           if (pos_ < n_) current_ = &children_[pos_];
         }
-        // 如果所有迭代器都无效，将 current_ 设为 nullptr
         if (pos_ >= n_ || !current_ || !current_->Valid()) {
           current_ = nullptr;
           return;
         }
-      }
-      
-      // 注释掉检查cur_zorder，因为不需要检查
-      // Slice cur_vkey = current_->key();
-      // uint64_t cur_zorder = DecodeFixed64(cur_vkey.data() + cur_vkey.size() - 8);   // 获取当前的zorder
-      // const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
-      // std::cout << "cur_idx_[pos_]: " << cur_idx_[pos_] << std::endl;
-      // std::cout << "cur_interval.start_: " << cur_interval.start_ << ", cur_interval.end_: " << cur_interval.end_ << std::endl;
-      // std::cout << "cur_zorder: " << cur_zorder << std::endl;
-      while (pos_ < n_ && !JumpNext()) {
-        ++pos_;
-        current_ = &children_[pos_];
-      }
-      // 检查循环结束后 current_ 是否仍然有效
-      if (pos_ >= n_ || !current_ || !current_->Valid()) {
-        current_ = nullptr;
-        return;
+      } else {
+        // current_ 还 valid，检查是否还在当前区间内
+        Slice cur_vkey = current_->key();
+        if (cur_vkey.size() >= 8 && cur_idx_[pos_] < region_.intervals_.size()) {
+          uint64_t cur_sort_key = DecodeFixed64(cur_vkey.data() + cur_vkey.size() - 8);
+          const auto& cur_interval = region_.intervals_[cur_idx_[pos_]];
+          
+          if (cur_sort_key > cur_interval.end_) {
+            // 超出当前区间，跳到下一个区间
+            while (pos_ < n_ && !JumpNext()) {
+              ++pos_;
+              if (pos_ < n_) {
+                current_ = &children_[pos_];
+                cur_idx_[pos_] = 0;  // 重置新 child 的区间索引
+              }
+            }
+            if (pos_ >= n_ || !current_ || !current_->Valid()) {
+              current_ = nullptr;
+              return;
+            }
+          }
+          // 否则还在区间内，直接返回
+        }
       }
     } else if (adgMod::MOD == 9) {
       if (!current_ || !current_->Valid()) {
@@ -426,9 +427,10 @@ class VMergingIterator : public Iterator {
       EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[pos_]].start_);
       current_->Seek({cur_vkey_, static_cast<size_t>(adgMod::key_size + 16)});
       if (current_->Valid()) {
-        current_->Next();
+        // 不再 Next()，Seek 到的位置就是下一个区间的起点
         break;
       }
+      cur_idx_[pos_]++;  // 这个区间也没数据，继续下一个
     }
     if (!current_->Valid()) {
       return false;
