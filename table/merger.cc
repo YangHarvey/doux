@@ -249,10 +249,10 @@ class VMergingIterator : public Iterator {
       }
     } else if (adgMod::MOD == 10) {
       EncodeFixed64(cur_vkey_, 0);
-      EncodeFixed64(cur_vkey_ + 8, 0);
-      EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
+      EncodeFixed64(cur_vkey_ + 8, 0);  // user key
+      EncodeFixed64(cur_vkey_ + 16, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));  // sequence number
       for (int i = 0; i < n_; i++) {
-        EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[i]].start_);
+        EncodeFixed64(cur_vkey_ + 24, region_.intervals_[cur_idx_[i]].start_);  // sort key
         Slice vkey(cur_vkey_, adgMod::key_size + 16);
         children_[i].Seek(vkey);
         if (children_[i].Valid()) {

@@ -80,7 +80,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
 
 // Construct the key for the value table
 // Vkey: [key, sort key]
-// sort key = Morton code of [value1, value2]
+// sort key = Morton code of [value1, value2] value的前8字节是sort key
 Slice ConstructVKey(const Slice& key, const Slice& value, Arena* arena) {
   // 分配内存
   size_t key_size = key.size();
@@ -88,23 +88,12 @@ Slice ConstructVKey(const Slice& key, const Slice& value, Arena* arena) {
   char* buf = arena->Allocate(key_size + sort_key_size);
 
   // 复制key
-  char* p = buf;
-  memcpy(p, key.data(), key_size);
-  p += key_size;
+  memcpy(buf, key.data(), key_size);
 
-  // 计算sort key
-  uint32_t val1 = DecodeBigEndianFixed32(value.data());
-  uint32_t val2 = DecodeBigEndianFixed32(value.data() + sizeof(uint32_t));
-  if (adgMod::MOD == 9) {
-    uint64_t sort_key = val1;
-    sort_key = (sort_key << 32) | val2;
-    EncodeFixed64(p, sort_key);
-  } else if (adgMod::MOD == 10 || adgMod::MOD == 13) {
-    auto sort_key = doux::MortonCode<2, 32>::Encode({val1, val2});
-    EncodeFixed64(p, sort_key);
-  }
+  // 复制sort key
+  memcpy(buf + key_size, value.data(), sort_key_size);
 
-  return Slice(buf, key_size + sizeof(uint64_t));
+  return Slice(buf, key_size + sort_key_size);
 }
 
 void ParseVKey(const Slice& vkey) {
@@ -145,7 +134,7 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     }
 
     for (; iter->Valid(); iter->Next()) {
-      Slice key = iter->key();
+      Slice key = iter->key();    // internal key
       Slice value = iter->value();
       Slice tmpKey = adgMod::MOD == 10 ? ConstructVKey(key, value, arena) : ConstructSlice(key, arena);
       VInfo info;
@@ -156,7 +145,12 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     // 获取value table的min_key和max_key
     Slice min_key, max_key;
     if (adgMod::MOD == 10 || adgMod::MOD == 13) {
-      std::sort(kvs.begin(), kvs.end(), VCompare);
+      const Comparator* vcmp = VKeyComparator();
+      std::sort(kvs.begin(), kvs.end(),
+      [vcmp](const std::pair<Slice, VInfo>& a,
+             const std::pair<Slice, VInfo>& b) {
+              return vcmp->Compare(a.first, b.first) < 0;
+            });
       // 排序后，min_key和max_key直接取首尾
       min_key = kvs[0].first;
       max_key = kvs[kvs.size() - 1].first;
@@ -175,13 +169,18 @@ Status BuildDuTable(const std::string& dbname, Env* env, const Options& options,
     vmeta->smallest.DecodeFrom(min_key);
     vmeta->largest.DecodeFrom(max_key);
 
-    TableBuilder* vbuilder;
-    vbuilder = new TableBuilder(options, vfile);
+    // 构造value table
+    Options voptions = options;
+    if(adgMod::MOD == 10 || adgMod::MOD == 13) {
+      voptions.comparator = VKeyComparator();
+    }
+    TableBuilder* vbuilder = new TableBuilder(voptions, vfile);
     for (auto& kv : kvs) {
       kv.second.file_number = static_cast<uint32_t>(vmeta->number);
       kv.second.block_number = vbuilder->BlockNumber();
       kv.second.block_offset = vbuilder->BlockOffset();
       vbuilder->Add(kv.first, kv.second.value);
+      // std::cout << "vbuilder added: " << kv.first.ToString() << ", " << kv.second.value.ToString() << std::endl;
     }
 
     // Finish and check for builder errors

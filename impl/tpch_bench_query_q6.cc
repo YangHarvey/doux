@@ -114,7 +114,31 @@ int main(int argc, char *argv[]) {
 
             cout << "Num of entries within range: " << res_count << endl;
 
-        } else {
+        } else if(adgMod::MOD == 10)
+        {
+            uint64_t res_count = 0;
+
+            read_options.start1 = low[0];
+            read_options.end1 = high[0];
+            read_options.start2 = low[1];
+            read_options.end2 = high[1];
+
+            doux::AABB<2, 32> aabb = {doux::MortonCode<2, 32>::Encode({low[0], low[1]}),
+            doux::MortonCode<2, 32>::Encode({high[0], high[1]})};
+            read_options.start = aabb.min_.data_;
+            read_options.end   = aabb.max_.data_;
+            
+            db_iter = db->NewVIterator(read_options);
+            db_iter->Seek(Slice());
+            for (; db_iter->Valid(); db_iter->Next()) {
+                Slice key = db_iter->key();
+                Slice value = db_iter->value();
+                ++res_count;
+            }
+
+            cout << "Num of entries within range: " << res_count << endl;
+        }        
+        else {
             std::cerr << "MOD is not supported" << std::endl;
         }
 

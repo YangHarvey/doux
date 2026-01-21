@@ -139,6 +139,7 @@ inline bool ParseInternalKey(const Slice& internal_key,
   return (c <= static_cast<unsigned char>(kTypeValue));
 }
 
+// Parse the internal key for the value table
 inline bool ParseInternalVKey(const Slice& internal_key,
                               ParsedInternalKey* result) {
   const size_t n = internal_key.size();

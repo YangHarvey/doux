@@ -600,14 +600,14 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                   meta.largest);
     // Only add vfile for modes that use vfile (MOD == 9, 10, or 13)
     if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
-      edit->AddVFile(vlevel, vmeta.number, vmeta.file_size, vmeta.smallest,
-                     vmeta.largest);
+    edit->AddVFile(vlevel, vmeta.number, vmeta.file_size, vmeta.smallest,
+                   vmeta.largest);
 
-      if (!adgMod::fresh_write) {
-        adgMod::vfile_stats_mutex.Lock();
-        assert(adgMod::vfile_stats.find(vmeta.number) == adgMod::vfile_stats.end());
-        adgMod::vfile_stats.insert({vmeta.number, adgMod::FileStats(level, vmeta.file_size)});
-        adgMod::vfile_stats_mutex.Unlock();
+    if (!adgMod::fresh_write) {
+      adgMod::vfile_stats_mutex.Lock();
+      assert(adgMod::vfile_stats.find(vmeta.number) == adgMod::vfile_stats.end());
+      adgMod::vfile_stats.insert({vmeta.number, adgMod::FileStats(level, vmeta.file_size)});
+      adgMod::vfile_stats_mutex.Unlock();
       }
     }
 
@@ -1236,7 +1236,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
 
 Status DBImpl::OpenCompactionVOutputFile(CompactionState* compact) {
   assert(compact != nullptr);
-  assert(compact->vbuilder != nullptr);
+  assert(compact->vbuilder == nullptr);
 
   uint64_t file_number;
   {
@@ -1255,7 +1255,13 @@ Status DBImpl::OpenCompactionVOutputFile(CompactionState* compact) {
   std::string vfname = VTableFileName(dbname_, file_number);
   Status s = env_->NewWritableFile(vfname, &compact->voutfile);
   if (s.ok()) {
-    compact->vbuilder = new TableBuilder(options_, compact->voutfile);
+    // vtable keys are vkeys ([internal_key][sort_key]) so the builder must use VKeyComparator
+    // to enforce strictly-increasing order under the same ordering we used to sort vkeys.
+    Options vopts = options_;
+    if (adgMod::MOD == 10 || adgMod::MOD == 13) {
+      vopts.comparator = VKeyComparator();
+    }
+    compact->vbuilder = new TableBuilder(vopts, compact->voutfile);
   }
 
   return s;
@@ -1445,18 +1451,18 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   }
   // Only process voutputs for modes that use vfile (MOD == 9, 10, or 13)
   if (adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) {
-    for (size_t i = 0; i < compact->voutputs.size(); i++) {
-      const CompactionState::Output& out = compact->voutputs[i];
+  for (size_t i = 0; i < compact->voutputs.size(); i++) {
+    const CompactionState::Output& out = compact->voutputs[i];
       // Only add vfile if file_size > 0, otherwise smallest/largest may be empty
       if (out.file_size > 0) {
-        int next_level = level + 1;
-        if (adgMod::MOD == 10) {
-          next_level = compact->compaction->num_input_vfiles(1) > 0 ? 1 : 0;
-        } else if (adgMod::MOD == 13) {
-          next_level = compact->compaction->num_input_vfiles(1);
-        }
-        compact->compaction->edit()->AddVFile(next_level, out.number, out.file_size,
-                                              out.smallest, out.largest);
+    int next_level = level + 1;
+    if (adgMod::MOD == 10) {
+      next_level = compact->compaction->num_input_vfiles(1) > 0 ? 1 : 0;
+    } else if (adgMod::MOD == 13) {
+      next_level = compact->compaction->num_input_vfiles(1);
+    }
+    compact->compaction->edit()->AddVFile(next_level, out.number, out.file_size,
+                                          out.smallest, out.largest);
       }
     }
   }
@@ -1958,7 +1964,15 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
 
   std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
 
-  std::sort(kvs.begin(), kvs.end(), VKCompare);
+  // sort keys
+  if (adgMod::MOD == 10 || adgMod::MOD == 13) {
+    const Comparator* vcmp = VKeyComparator();
+    std::sort(kvs.begin(), kvs.end(),
+    [vcmp](const std::pair<Slice, Slice>& a,
+           const std::pair<Slice, Slice>& b) {
+      return vcmp->Compare(a.first, b.first) < 0;
+    });
+  }
   Slice min_key = kvs[0].first;
   Slice max_key = kvs[kvs.size() - 1].first;
   compact->current_voutput()->smallest.DecodeFrom(min_key);
@@ -2078,6 +2092,8 @@ Iterator* DBImpl::NewVInternalIterator(const ReadOptions& options,
   *latest_snapshot = versions_->LastSequence();
 
   std::vector<Iterator*> list;
+  mem_->Ref();
+  if (imm_ != nullptr) imm_->Ref();
   versions_->current()->AddVIterators(options, &list);
   Iterator* internal_iter = 
       NewVMergingIterator(options, &internal_comparator_, &list[0], list.size());

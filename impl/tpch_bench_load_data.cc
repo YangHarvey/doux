@@ -62,11 +62,20 @@ void EncodeRow(const vector<string>& rows, string* pkey, string* vkey, string *s
     {
         double shipdate = uniformDate(rows[l_shipdate].c_str());
         double quantity = std::stod(rows[l_quantity].c_str());
-        double receiptdate = uniformDate(rows[l_receiptdate].c_str());
+        if(adgMod::MOD == 10 || adgMod::MOD == 13) {
+            // doux
+            uint32_t val1 = shipdate * 10000;
+            uint32_t val2 = quantity;
+            auto sort_key = doux::MortonCode<2, 32>::Encode({val1, val2});
+            uint64_t sk = static_cast<uint64_t>(sort_key);
 
-        value->append(reinterpret_cast<const char*>(&shipdate), sizeof(double));
-        value->append(reinterpret_cast<const char*>(&quantity), sizeof(double));
-        value->append(reinterpret_cast<const char*>(&receiptdate), sizeof(double));
+            char buf[sizeof(uint64_t)];
+            EncodeFixed64(buf, sk);
+            value->append(buf, sizeof(uint64_t));
+        } else {
+            value->append(reinterpret_cast<const char*>(&shipdate), sizeof(double));
+            value->append(reinterpret_cast<const char*>(&quantity), sizeof(double));
+        }
 
         uint64_t partkey = std::stoull(rows[l_partkey].c_str(), nullptr, 10);
         value->append(reinterpret_cast<const char*>(&partkey), sizeof(uint64_t));
@@ -182,26 +191,46 @@ int main(int argc, char *argv[]) {
     string src;
     vector<string> row;
 
-    for(size_t i = 0; i < data_count; i++) {
-        getline(input, src);
-        splitRow(src, row);
-        string pkey, vkey, secondary_key, value;
+    if (adgMod::MOD == 0) {
+        // leveldb
+        for(size_t i = 0; i < data_count; i++) {
+            getline(input, src);
+            splitRow(src, row);
+            string pkey, vkey, secondary_key, value;
 
-        EncodeRow(row, &pkey, &vkey, &secondary_key, &value);
+            EncodeRow(row, &pkey, &vkey, &secondary_key, &value);
 
-        instance->StartTimer(9);
-        if(!adgMod::use_secondary_index) {
-            // no secondary index
-            status = db->Put(write_options, pkey, value);
-        } else {
-            // if use secondary index
-            status = db->sPut(write_options, pkey, secondary_key, value);
+            instance->StartTimer(9);
+            if(!adgMod::use_secondary_index) {
+                // no secondary index
+                status = db->Put(write_options, pkey, value);
+            } else {
+                // if use secondary index
+                status = db->sPut(write_options, pkey, secondary_key, value);
+            }
+            assert(status.ok() && "File Put Error");
+            instance->PauseTimer(9, true);
+
+            row.clear();
         }
-        assert(status.ok() && "File Put Error");
-        instance->PauseTimer(9, true);
+    } else if (adgMod::MOD == 10) {
+        // doux
+        for(size_t i = 0; i < data_count; i++) {
+            getline(input, src);
+            splitRow(src, row);
+            string pkey, vkey, secondary_key, value;
+            EncodeRow(row, &pkey, &vkey, &secondary_key, &value);
 
-        row.clear();
+            instance->StartTimer(9);
+            status = db->Put(write_options, pkey, value);
+            assert(status.ok() && "File Put Error");
+            instance->PauseTimer(9, true);
+
+            row.clear();
+        }
     }
+
+
     cout << "Put Complete" << endl;
     if(adgMod::MOD == 12) {
         db->runAllColocationGC();
