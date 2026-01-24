@@ -1866,10 +1866,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 }
 
 Status DBImpl::DoVCompactionWork(CompactionState* compact) {
-  Log(options_.info_log, "Compacting %d@%d + %d@%d vfiles",
-      compact->compaction->num_input_vfiles(0), compact->compaction->level(),
-      compact->compaction->num_input_vfiles(1), compact->compaction->level() + 1);
-
   assert(versions_->NumLevelVFiles(compact->compaction->level()) > 0);
   assert(compact->vbuilder == nullptr);
   assert(compact->voutfile == nullptr);
@@ -1890,12 +1886,15 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
   Arena arena;
   std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>,
       HashSliceV2>& key_map = compact->compaction->key_map_;
+  auto& key_source_map = compact->compaction->key_source_map_;  // 新的带来源信息的 map
   std::vector<std::pair<Slice, Slice>>& kvs = compact->compaction->kvs_;
   std::unordered_map<uint64_t, Table*>& vtables = versions_->current()->vtables_;
 
   for (size_t which = 0; which < 2; which++) {
     for (size_t i = 0; i < compact->compaction->num_input_vfiles(which); i++) {
       FileMetaData* f = compact->compaction->vinput(which, i);
+      uint64_t source_file_number = f->number;  // 记录来源文件号
+      
       Iterator* it;
       if (vtables.find(f->number) == vtables.end()) {
         std::string vfname = VTableFileName(versions_->dbname_, f->number);
@@ -1917,11 +1916,27 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
           Slice value = ConstructSlice(it->value(), &arena);
           ParsedInternalKey ikey;
           ParseInternalVKey(vkey, &ikey);
-          if (key_map.find(ikey.user_key) == key_map.end()) {
-            key_map[ikey.user_key] = std::make_pair<>(ikey, value);
+          
+          // 获取准确的 block number（使用 TwoLevelIterator 专用的辅助函数）
+          uint32_t source_block = GetCurrentBlockIndex(it);
+          
+          // 使用 key_source_map 记录完整的来源信息
+          if (adgMod::MOD == 10) {
+            if (key_source_map.find(ikey.user_key) == key_source_map.end()) {
+              key_source_map[ikey.user_key] = Compaction::KeySourceInfo(ikey, value, source_file_number, source_block);
+            } else {
+              if (ikey.sequence > key_source_map[ikey.user_key].ikey.sequence) {
+                key_source_map[ikey.user_key] = Compaction::KeySourceInfo(ikey, value, source_file_number, source_block);
+              }
+            }
           } else {
-            if (ikey.sequence > key_map[ikey.user_key].first.sequence) {
-              key_map[ikey.user_key].first = ikey;
+            // 向后兼容：其他 MOD 仍使用 key_map
+            if (key_map.find(ikey.user_key) == key_map.end()) {
+              key_map[ikey.user_key] = std::make_pair<>(ikey, value);
+            } else {
+              if (ikey.sequence > key_map[ikey.user_key].first.sequence) {
+                key_map[ikey.user_key].first = ikey;
+              }
             }
           }
         }
@@ -1933,18 +1948,31 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     }
   }
 
-  // Validation Phase 已注释，直接将 key_map 转为 kvs
-  for (const auto& map_it : key_map) {
-    const ParsedInternalKey& ikey = map_it.second.first;
-    if (ikey.type != kTypeDeletion) {
-      Slice vkey(ikey.user_key.data(), ikey.user_key.size() + 16);
-      kvs.push_back({vkey, map_it.second.second});
+  // Validation Phase 已注释，直接将 key_map/key_source_map 转为 kvs
+  if (adgMod::MOD == 10) {
+    // MOD 10: 使用 key_source_map
+    for (const auto& map_it : key_source_map) {
+      const ParsedInternalKey& ikey = map_it.second.ikey;
+      if (ikey.type != kTypeDeletion) {
+        Slice vkey(ikey.user_key.data(), ikey.user_key.size() + 16);
+        kvs.push_back({vkey, map_it.second.value});
+      }
+    }
+  } else {
+    // 其他 MOD: 使用 key_map（向后兼容）
+    for (const auto& map_it : key_map) {
+      const ParsedInternalKey& ikey = map_it.second.first;
+      if (ikey.type != kTypeDeletion) {
+        Slice vkey(ikey.user_key.data(), ikey.user_key.size() + 16);
+        kvs.push_back({vkey, map_it.second.second});
+      }
     }
   }
 
   // 检查是否有有效的 KV 对
   if (kvs.empty()) {
     key_map.clear();
+    key_source_map.clear();
     kvs.clear();
     
     mutex_.Lock();
@@ -1974,16 +2002,69 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
   Slice max_key = kvs[kvs.size() - 1].first;
   compact->current_voutput()->smallest.DecodeFrom(min_key);
   compact->current_voutput()->largest.DecodeFrom(max_key);
+  
+  // 记录 block 映射 (MOD 10)
+  std::map<std::pair<uint64_t, uint32_t>, std::set<uint32_t>> block_mappings;
+  // key: (input_file, input_block), value: set of output_blocks
+  
+  // 为了从 vkey 找到来源信息，需要建立一个临时映射
+  std::unordered_map<Slice, const Compaction::KeySourceInfo*, HashSliceV2> vkey_to_source;
+  if (adgMod::MOD == 10) {
+    for (const auto& map_it : key_source_map) {
+      Slice vkey(map_it.second.ikey.user_key.data(), map_it.second.ikey.user_key.size() + 16);
+      vkey_to_source[vkey] = &map_it.second;
+    }
+  }
+  
   for (size_t i = 0; i < kvs.size(); i++) {
+    // 获取当前将要写入的 output block
+    uint32_t output_block = compact->vbuilder->BlockNumber();
+    
+    // 添加到 vbuilder
     compact->vbuilder->Add(kvs[i].first, kvs[i].second);
+    
+    // 记录映射（使用真实的来源信息）
+    if (adgMod::MOD == 10) {
+      auto it = vkey_to_source.find(kvs[i].first);
+      if (it != vkey_to_source.end()) {
+        uint64_t input_file = it->second->source_file;
+        uint32_t input_block = it->second->source_block;
+        block_mappings[{input_file, input_block}].insert(output_block);
+      }
+    }
   }
 
   status = FinishCompactionVOutputFile(compact);
   
   key_map.clear();
+  key_source_map.clear();  // 也清理 key_source_map
   kvs.clear();
 
   mutex_.Lock();
+  
+  // 记录 VCompaction 的 block 映射到 DependencyGraph (仅 MOD 10)
+  if (status.ok() && adgMod::MOD == 10 && !compact->voutputs.empty() && !block_mappings.empty()) {
+    doux::DependencyGraph& dep_graph = versions_->current()->vblock_dep_graph_;
+    uint64_t output_file_number = compact->voutputs[0].number;
+    
+    // 将 block_mappings 应用到 DependencyGraph
+    for (const auto& mapping : block_mappings) {
+      uint64_t input_file = mapping.first.first;
+      uint32_t input_block = mapping.first.second;
+      const auto& output_blocks = mapping.second;
+      
+      if (!output_blocks.empty()) {
+        uint32_t min_output_block = *output_blocks.begin();
+        uint32_t max_output_block = *output_blocks.rbegin();
+        
+        dep_graph.AddMapping(
+            input_file, doux::BlockRange(input_block, input_block),
+            output_file_number, doux::BlockRange(min_output_block, max_output_block)
+        );
+      }
+    }
+  }
+  
   if (status.ok()) {
     status = InstallCompactionResults(compact);
   }
@@ -1991,9 +2072,7 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
     RecordBackgroundError(status);
   }
 
-  std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
   if (status.ok() && adgMod::MOD == 10 && !adgMod::if_decoupled_compaction) {
-    std::cout << "This line is number: " << __FILE__  << ":" << __LINE__ << std::endl;
     Log(options_.info_log, "Starting post-VCompaction LSM-tree Compactions...");
     for (int i = 0; i < 100; ++i) {
       Status compaction_status = TriggerLSMTreeCompaction();
@@ -2421,11 +2500,11 @@ Iterator* DBImpl::NewVIterator(const ReadOptions& options) {
   uint32_t seed;
   Iterator* iter = NewVInternalIterator(options, &latest_snapshot, &seed);
   return NewDBVIterator(this, user_comparator(), iter,
-                        (options.snapshot != nullptr
-                             ? static_cast<const SnapshotImpl*>(options.snapshot)
-                                   ->sequence_number()
-                             : latest_snapshot),
-                        seed);
+                       (options.snapshot != nullptr
+                            ? static_cast<const SnapshotImpl*>(options.snapshot)
+                                  ->sequence_number()
+                            : latest_snapshot),
+                       seed);
 }
 
 void DBImpl::RecordReadSample(Slice key) {

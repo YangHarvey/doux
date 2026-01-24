@@ -70,6 +70,9 @@ std::string InfoLogFileName(const std::string& dbname);
 // Return the name of the old info log file for "dbname".
 std::string OldInfoLogFileName(const std::string& dbname);
 
+// Return the name of the dependency graph file for "dbname".
+std::string DependencyGraphFileName(const std::string& dbname);
+
 // If filename is a leveldb file, store the type of the file in *type.
 // The number encoded in the filename is stored in *number.  If the
 // filename was successfully parsed, returns true.  Else return false.

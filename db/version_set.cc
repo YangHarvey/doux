@@ -1334,6 +1334,12 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     }
   }
 
+  // 将当前版本的 DependencyGraph 继承到新版本（增量更新）
+  // 必须在保存到磁盘之前继承，否则保存的是空版本
+  if (adgMod::MOD == 10 && current_ != nullptr) {
+    v->vblock_dep_graph_ = current_->vblock_dep_graph_;
+  }
+
   // Unlock during expensive MANIFEST log write
   {
     mu->Unlock();
@@ -1343,11 +1349,27 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       std::string record;
       edit->EncodeTo(&record);
       s = descriptor_log_->AddRecord(record);
-      if (s.ok()) {
-        s = descriptor_file_->Sync();
-      }
       if (!s.ok()) {
         Log(options_->info_log, "MANIFEST write: %s\n", s.ToString().c_str());
+      }
+    }
+
+    // Save DependencyGraph to disk (同步保存，和 manifest 一起)
+    // 注意：此时 v->vblock_dep_graph_ 已经继承了 current_ 的内容
+    // 必须在 Sync 之前保存，确保数据一致性
+    if (s.ok() && adgMod::MOD == 10) {
+      std::string dep_graph_file = DependencyGraphFileName(dbname_);
+      if (!v->vblock_dep_graph_.SaveToFile(dep_graph_file)) {
+        Log(options_->info_log, "DependencyGraph write failed\n");
+        s = Status::IOError("DependencyGraph write failed");
+      }
+    }
+
+    // Sync manifest file (同时确保 DependencyGraph 也已写入)
+    if (s.ok()) {
+      s = descriptor_file_->Sync();
+      if (!s.ok()) {
+        Log(options_->info_log, "MANIFEST sync: %s\n", s.ToString().c_str());
       }
     }
 
@@ -1364,6 +1386,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (s.ok()) {
     ApplyToModel(edit, current_, v);
     adgMod::db->version_count += 1;
+    
     AppendVersion(v);
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
@@ -1490,6 +1513,20 @@ Status VersionSet::Recover(bool* save_manifest) {
     builder.SaveTo(v);
     // Install recovered version
     Finalize(v);
+    
+    // Load DependencyGraph from disk
+    if (adgMod::MOD == 10) {
+      std::string dep_graph_file = DependencyGraphFileName(dbname_);
+      if (!v->vblock_dep_graph_.LoadFromFile(dep_graph_file)) {
+        // DependencyGraph 文件不存在或损坏，从空开始
+        Log(options_->info_log, "DependencyGraph not found or corrupted, starting fresh\n");
+        v->vblock_dep_graph_.Clear();
+      } else {
+        Log(options_->info_log, "DependencyGraph loaded: %zu mappings\n", 
+            v->vblock_dep_graph_.Size());
+      }
+    }
+    
     AppendVersion(v);
     manifest_file_number_ = next_file;
     next_file_number_ = next_file + 1;
