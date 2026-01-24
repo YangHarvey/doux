@@ -212,13 +212,16 @@ if [ "$USE_STRACE" = true ] && [ -f "$STRACE_OUTPUT" ]; then
     # 或者: pwrite64(3, "data", 1024, 4096) = 1024
     # 或者: [pid 12345] write(3, "data", 1024) = 1024
     # 需要过滤掉错误返回值（负数）和特殊值（如 -1）
+    # 使用 printf "%d" 确保输出整数格式，避免科学计数法
     TOTAL_BYTES_WRITTEN_STRACE=$(grep -E "write\(|pwrite|writev" "$STRACE_OUTPUT" | \
         grep -E "= [0-9]+$" | \
         grep -vE "= -[0-9]+$" | \
         sed -E 's/.*= ([0-9]+)$/\1/' | \
-        awk '{if ($1 > 0) sum += $1} END {print sum+0}')
+        awk '{if ($1 > 0) sum += $1} END {printf "%d", sum+0}')
     
-    if [ -n "$TOTAL_BYTES_WRITTEN_STRACE" ] && [ "$TOTAL_BYTES_WRITTEN_STRACE" -gt 0 ]; then
+    # 使用 bc 来比较，避免科学计数法问题
+    if [ -n "$TOTAL_BYTES_WRITTEN_STRACE" ] && [ "$TOTAL_BYTES_WRITTEN_STRACE" != "0" ] && \
+       (( $(echo "$TOTAL_BYTES_WRITTEN_STRACE > 0" | bc -l) )); then
         STRACE_MB=$(echo "scale=2; $TOTAL_BYTES_WRITTEN_STRACE / 1024 / 1024" | bc)
         STRACE_GB=$(echo "scale=2; $TOTAL_BYTES_WRITTEN_STRACE / 1024 / 1024 / 1024" | bc)
         echo "strace 统计的总写入量: $TOTAL_BYTES_WRITTEN_STRACE 字节 ($STRACE_MB MB, $STRACE_GB GB)"
