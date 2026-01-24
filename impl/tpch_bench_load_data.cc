@@ -16,6 +16,8 @@
 #include "../mod/stats.h"
 #include "../mod/cxxopts.hpp"
 #include "../db/version_set.h"
+#include "../db/filename.h"
+#include "dependency.h"
 #include "tpch_base.h"
 
 using namespace leveldb;
@@ -382,6 +384,34 @@ int main(int argc, char *argv[]) {
     delete db;
 
     input.close();
+
+    // 打印 DependencyGraph 的磁盘占用和内存占用（仅在 MOD == 10 时）
+    if (adgMod::MOD == 10) {
+        // 文件名由 db/filename.h 中的 DependencyGraphFileName 生成
+        std::string dep_fname = DependencyGraphFileName(db_location);
+
+        // 磁盘占用：直接读取依赖图文件大小
+        std::error_code ec;
+        auto file_size = std::filesystem::file_size(dep_fname, ec);
+        if (!ec) {
+            std::cout << "DependencyGraph disk usage: " << file_size << " bytes ("
+                      << static_cast<double>(file_size) / 1024.0 / 1024.0 << " MB)" << std::endl;
+        } else {
+            std::cout << "DependencyGraph file not found or inaccessible: " << dep_fname << std::endl;
+        }
+
+        // 内存占用：加载到内存中，使用 DependencyGraph 的近似统计
+        doux::DependencyGraph dep_graph;
+        if (dep_graph.LoadFromFile(dep_fname)) {
+            std::cout << "DependencyGraph in-memory mapping count: " << dep_graph.Size() << std::endl;
+            std::cout << "DependencyGraph approximate memory usage: "
+                      << dep_graph.ApproxMemoryUsageBytes() << " bytes ("
+                      << static_cast<double>(dep_graph.ApproxMemoryUsageBytes()) / 1024.0 / 1024.0
+                      << " MB)" << std::endl;
+        } else {
+            std::cout << "Failed to load DependencyGraph from file: " << dep_fname << std::endl;
+        }
+    }
 
     std::cout << "Time taken: " << instance->ReportTime(9) << " seconds" << std::endl;
     return 0;

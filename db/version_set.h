@@ -226,7 +226,8 @@ public:
   std::map<int, std::shared_ptr<adgMod::LearnedIndexData>> file_learned_index_data_;
   std::unordered_map<uint64_t, Table*> vtables_;
   std::unordered_map<uint64_t, FileMetaData*> vfile_map_;
-  doux::Dependency dep_;
+  doux::Dependency dep_;  // 旧的简单依赖图（向后兼容）
+  doux::DependencyGraph vblock_dep_graph_;  // 新的 block-level 依赖图
 };
 
 class VersionSet {
@@ -480,7 +481,20 @@ class Compaction {
   std::unordered_map<Slice, size_t, HashSliceV2> key_idx_;
   std::vector<std::pair<Slice, VInfo>> pending_kvs_;
 
-  std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>, HashSliceV2> key_map_;
+  // VCompaction 的 key 信息，包含来源文件和 block 信息
+  struct KeySourceInfo {
+    ParsedInternalKey ikey;
+    Slice value;
+    uint64_t source_file;    // 来自哪个输入文件
+    uint32_t source_block;   // 来自输入文件的哪个 block
+    
+    KeySourceInfo() : source_file(0), source_block(0) {}
+    KeySourceInfo(const ParsedInternalKey& k, const Slice& v, uint64_t f, uint32_t b)
+        : ikey(k), value(v), source_file(f), source_block(b) {}
+  };
+  
+  std::unordered_map<Slice, std::pair<ParsedInternalKey, Slice>, HashSliceV2> key_map_;  // 保留向后兼容
+  std::unordered_map<Slice, KeySourceInfo, HashSliceV2> key_source_map_;  // 新的带来源信息的 map
   std::vector<std::pair<Slice, Slice>> kvs_;
 
  private:

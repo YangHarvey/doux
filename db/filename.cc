@@ -73,6 +73,11 @@ std::string OldInfoLogFileName(const std::string& dbname) {
   return dbname + "/LOG.old";
 }
 
+// Return the name of the dependency graph file for "dbname".
+std::string DependencyGraphFileName(const std::string& dbname) {
+  return dbname + "/DEPENDENCY";
+}
+
 // Owned filenames have the form:
 //    dbname/CURRENT
 //    dbname/LOCK
