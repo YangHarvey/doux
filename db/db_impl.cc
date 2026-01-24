@@ -625,6 +625,11 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros;
   stats.bytes_written = meta.file_size;
+  stats.count = 1;  // One flush operation
+  // Also count VSST file writes for modes that use vfile (MOD == 9, 10, or 13)
+  if ((adgMod::MOD == 9 || adgMod::MOD == 10 || adgMod::MOD == 13) && vmeta.file_size > 0) {
+    stats.bytes_written += vmeta.file_size;
+  }
   stats_[level].Add(stats);
   return s;
 }
@@ -1836,6 +1841,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros - imm_micros;
+  stats.count = 1;  // One compaction operation
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); ++i) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
@@ -1847,8 +1853,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
-  for (size_t i = 0; i < compact->voutputs.size(); i++) {
-    stats.bytes_written += compact->voutputs[i].file_size;
+  // 只在 MOD=9 时统计 voutputs，因为 MOD=9 的 DoCompactionWork 会创建 VSST
+  // MOD=10 的 VSST 由 DoVCompactionWork 单独处理，避免重复统计
+  if (adgMod::MOD == 9) {
+    for (size_t i = 0; i < compact->voutputs.size(); i++) {
+      stats.bytes_written += compact->voutputs[i].file_size;
+    }
   }
 
   mutex_.Lock();
@@ -1866,6 +1876,11 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 }
 
 Status DBImpl::DoVCompactionWork(CompactionState* compact) {
+  const uint64_t start_micros = env_->NowMicros();
+  Log(options_.info_log, "Compacting %d@%d + %d@%d vfiles",
+      compact->compaction->num_input_vfiles(0), compact->compaction->level(),
+      compact->compaction->num_input_vfiles(1), compact->compaction->level() + 1);
+
   assert(versions_->NumLevelVFiles(compact->compaction->level()) > 0);
   assert(compact->vbuilder == nullptr);
   assert(compact->voutfile == nullptr);
@@ -2040,7 +2055,29 @@ Status DBImpl::DoVCompactionWork(CompactionState* compact) {
   key_source_map.clear();  // 也清理 key_source_map
   kvs.clear();
 
+  // 统计 VSST compaction 的写入量（类似 DoCompactionWork）
+  CompactionStats stats;
+  stats.micros = env_->NowMicros() - start_micros;
+  stats.count = 1;  // One VSST compaction operation
+  // 统计读取的 VSST 文件大小
+  for (int which = 0; which < 2; which++) {
+    for (int i = 0; i < compact->compaction->num_input_vfiles(which); ++i) {
+      stats.bytes_read += compact->compaction->vinput(which, i)->file_size;
+    }
+  }
+  // 统计写入的 VSST 文件大小
+  for (size_t i = 0; i < compact->voutputs.size(); i++) {
+    stats.bytes_written += compact->voutputs[i].file_size;
+  }
+
   mutex_.Lock();
+  // 将统计信息添加到对应的 level（VSST compaction 通常输出到 level 0 或 1）
+  int output_level = compact->compaction->level();
+  if (compact->compaction->num_input_vfiles(1) > 0) {
+    output_level = 1;  // 如果有 level 1 输入，输出到 level 1
+  }
+  stats_[output_level].Add(stats);
+  
   
   // 记录 VCompaction 的 block 映射到 DependencyGraph (仅 MOD 10)
   if (status.ok() && adgMod::MOD == 10 && !compact->voutputs.empty() && !block_mappings.empty()) {
@@ -2881,17 +2918,18 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     char buf[200];
     snprintf(buf, sizeof(buf),
              "                               Compactions\n"
-             "Level  Files Size(MB) Time(sec) Read(MB) Write(MB)\n"
-             "--------------------------------------------------\n");
+             "Level  Files Size(MB) Time(sec) Read(MB) Write(MB) Count\n"
+             "--------------------------------------------------------\n");
     value->append(buf);
     for (int level = 0; level < config::kNumLevels; level++) {
       int files = versions_->NumLevelFiles(level);
       if (stats_[level].micros > 0 || files > 0) {
-        snprintf(buf, sizeof(buf), "%3d %8d %8.0f %9.0f %8.0f %9.0f\n", level,
+        snprintf(buf, sizeof(buf), "%3d %8d %8.0f %9.0f %8.0f %9.0f %5lld\n", level,
                  files, versions_->NumLevelBytes(level) / 1048576.0,
                  stats_[level].micros / 1e6,
                  stats_[level].bytes_read / 1048576.0,
-                 stats_[level].bytes_written / 1048576.0);
+                 stats_[level].bytes_written / 1048576.0,
+                 static_cast<long long>(stats_[level].count));
         value->append(buf);
       }
     }

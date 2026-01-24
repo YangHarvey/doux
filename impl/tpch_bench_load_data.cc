@@ -9,6 +9,7 @@
 #include <ctime>
 #include <filesystem>
 #include <time.h>
+#include <sstream>
 #include "leveldb/db.h"
 #include "leveldb/comparator.h"
 #include "../mod/util.h"
@@ -238,6 +239,148 @@ int main(int argc, char *argv[]) {
         db->runAllColocationGC();
     }
     adgMod::db->WaitForBackground();
+    
+    // 获取统计信息以计算写放大
+    string stats;
+    if (db->GetProperty("leveldb.stats", &stats)) {
+        // 解析统计信息，计算总写入量
+        uint64_t total_bytes_written = 0;
+        std::istringstream iss(stats);
+        string line;
+        bool header_found = false;
+        
+        while (std::getline(iss, line)) {
+            if (line.find("Write(MB)") != string::npos) {
+                header_found = true;
+                continue;
+            }
+            if (header_found && line.find("---") == string::npos && !line.empty()) {
+                // 解析每一行的写入量（MB），格式: "Level  Files Size(MB) Time(sec) Read(MB) Write(MB) Count"
+                std::istringstream line_stream(line);
+                int level, files;
+                double size_mb, time_sec, read_mb, write_mb;
+                int64_t count = 0;
+                if (line_stream >> level >> files >> size_mb >> time_sec >> read_mb >> write_mb >> count) {
+                    total_bytes_written += static_cast<uint64_t>(write_mb * 1048576.0);
+                } else if (line_stream >> level >> files >> size_mb >> time_sec >> read_mb >> write_mb) {
+                    // 兼容旧格式（没有 Count 列）
+                    total_bytes_written += static_cast<uint64_t>(write_mb * 1048576.0);
+                }
+            }
+        }
+        
+        if (total_bytes_written > 0) {
+            double total_write_mb = total_bytes_written / 1048576.0;
+            double total_write_gb = total_bytes_written / 1073741824.0;
+            std::cout << "=== Write Statistics ===" << std::endl;
+            std::cout << "Total bytes written (all levels): " << total_bytes_written << " bytes" << std::endl;
+            std::cout << "Total bytes written: " << total_write_mb << " MB" << std::endl;
+            std::cout << "Total bytes written: " << total_write_gb << " GB" << std::endl;
+            std::cout << "STATS_TOTAL_BYTES_WRITTEN=" << total_bytes_written << std::endl;
+            std::cout << std::endl;
+            
+            // 详细统计每个 level 的写入
+            std::cout << "=== Per-Level Write Breakdown ===" << std::endl;
+            std::cout << stats << std::endl;
+            
+            // 解析并显示每个 level 的详细统计
+            std::cout << "=== Detailed Write Statistics by Level ===" << std::endl;
+            std::istringstream iss2(stats);
+            string line2;
+            bool header_found2 = false;
+            uint64_t level0_write = 0, level1_write = 0, level2_write = 0, other_level_write = 0;
+            int64_t level0_count = 0, level1_count = 0, level2_count = 0, other_level_count = 0;
+            uint64_t level0_read = 0, level1_read = 0, level2_read = 0, other_level_read = 0;
+            
+            while (std::getline(iss2, line2)) {
+                if (line2.find("Write(MB)") != string::npos || line2.find("Count") != string::npos) {
+                    header_found2 = true;
+                    continue;
+                }
+                if (header_found2 && line2.find("---") == string::npos && !line2.empty()) {
+                    std::istringstream line_stream2(line2);
+                    int level, files;
+                    double size_mb, time_sec, read_mb, write_mb;
+                    int64_t count = 0;
+                    if (line_stream2 >> level >> files >> size_mb >> time_sec >> read_mb >> write_mb >> count) {
+                        uint64_t write_bytes = static_cast<uint64_t>(write_mb * 1048576.0);
+                        uint64_t read_bytes = static_cast<uint64_t>(read_mb * 1048576.0);
+                        if (level == 0) {
+                            level0_write += write_bytes;
+                            level0_read += read_bytes;
+                            level0_count += count;
+                        } else if (level == 1) {
+                            level1_write += write_bytes;
+                            level1_read += read_bytes;
+                            level1_count += count;
+                        } else if (level == 2) {
+                            level2_write += write_bytes;
+                            level2_read += read_bytes;
+                            level2_count += count;
+                        } else {
+                            other_level_write += write_bytes;
+                            other_level_read += read_bytes;
+                            other_level_count += count;
+                        }
+                    } else if (line_stream2 >> level >> files >> size_mb >> time_sec >> read_mb >> write_mb) {
+                        // 兼容旧格式
+                        uint64_t write_bytes = static_cast<uint64_t>(write_mb * 1048576.0);
+                        uint64_t read_bytes = static_cast<uint64_t>(read_mb * 1048576.0);
+                        if (level == 0) {
+                            level0_write += write_bytes;
+                            level0_read += read_bytes;
+                            level0_count += 1;  // 假设至少一次
+                        } else if (level == 1) {
+                            level1_write += write_bytes;
+                            level1_read += read_bytes;
+                            level1_count += 1;
+                        } else if (level == 2) {
+                            level2_write += write_bytes;
+                            level2_read += read_bytes;
+                            level2_count += 1;
+                        } else {
+                            other_level_write += write_bytes;
+                            other_level_read += read_bytes;
+                            other_level_count += 1;
+                        }
+                    }
+                }
+            }
+            
+            std::cout << "Level 0 writes (flush): " << level0_write << " bytes (" 
+                      << level0_write / 1048576.0 << " MB), " << level0_count 
+                      << " operations, avg " << (level0_count > 0 ? level0_write / level0_count / 1048576.0 : 0) 
+                      << " MB per operation" << std::endl;
+            std::cout << "Level 1 writes (compaction): " << level1_write << " bytes (" 
+                      << level1_write / 1048576.0 << " MB), " << level1_count 
+                      << " compactions, avg " << (level1_count > 0 ? level1_write / level1_count / 1048576.0 : 0) 
+                      << " MB per compaction" << std::endl;
+            if (level2_write > 0) {
+                std::cout << "Level 2 writes (compaction): " << level2_write << " bytes (" 
+                          << level2_write / 1048576.0 << " MB), " << level2_count 
+                          << " compactions, avg " << (level2_count > 0 ? level2_write / level2_count / 1048576.0 : 0) 
+                          << " MB per compaction" << std::endl;
+            }
+            if (other_level_write > 0) {
+                std::cout << "Other levels writes: " << other_level_write << " bytes (" 
+                          << other_level_write / 1048576.0 << " MB), " << other_level_count 
+                          << " compactions" << std::endl;
+            }
+            std::cout << "Total compaction count: " << (level0_count + level1_count + level2_count + other_level_count) << std::endl;
+            std::cout << std::endl;
+            
+            // 验证统计完整性
+            uint64_t sum_by_level = level0_write + level1_write + level2_write + other_level_write;
+            if (sum_by_level != total_bytes_written) {
+                std::cout << "⚠ Warning: Sum by level (" << sum_by_level 
+                          << ") != Total (" << total_bytes_written << ")" << std::endl;
+            } else {
+                std::cout << "✓ Statistics verification: Sum by level matches total" << std::endl;
+            }
+            std::cout << std::endl;
+        }
+    }
+    
     delete db;
 
     input.close();
