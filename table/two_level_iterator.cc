@@ -11,10 +11,9 @@
 
 namespace leveldb {
 
-namespace {
-
 typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
+// TwoLevelIterator 移到 leveldb 命名空间，以便外部可以访问
 class TwoLevelIterator : public Iterator {
  public:
   TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,
@@ -47,6 +46,11 @@ class TwoLevelIterator : public Iterator {
       return status_;
     }
   }
+  
+  // 获取当前所在的 block index
+  virtual uint32_t CurrentBlockIndex() const {
+    return current_block_index_;
+  }
 
  private:
   void SaveError(const Status& s) {
@@ -66,6 +70,7 @@ class TwoLevelIterator : public Iterator {
   // If data_iter_ is non-null, then "data_block_handle_" holds the
   // "index_value" passed to block_function_ to create the data_iter_.
   std::string data_block_handle_;
+  mutable uint32_t current_block_index_;  // 当前所在的 block index
 };
 
 TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
@@ -75,7 +80,8 @@ TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
       arg_(arg),
       options_(options),
       index_iter_(index_iter),
-      data_iter_(nullptr) {}
+      data_iter_(nullptr),
+      current_block_index_(0) {}
 
 TwoLevelIterator::~TwoLevelIterator() {}
 
@@ -88,6 +94,7 @@ void TwoLevelIterator::Seek(const Slice& target) {
 
 void TwoLevelIterator::SeekToFirst() {
   index_iter_.SeekToFirst();
+  current_block_index_ = 0;  // 重置到第一个 block
   InitDataBlock();
   if (data_iter_.iter() != nullptr) data_iter_.SeekToFirst();
   SkipEmptyDataBlocksForward();
@@ -120,6 +127,7 @@ void TwoLevelIterator::SkipEmptyDataBlocksForward() {
       return;
     }
     index_iter_.Next();
+    current_block_index_++;  // 移动到下一个 block
     InitDataBlock();
     if (data_iter_.iter() != nullptr) data_iter_.SeekToFirst();
   }
@@ -133,6 +141,7 @@ void TwoLevelIterator::SkipEmptyDataBlocksBackward() {
       return;
     }
     index_iter_.Prev();
+    if (current_block_index_ > 0) current_block_index_--;  // 移动到前一个 block
     InitDataBlock();
     if (data_iter_.iter() != nullptr) data_iter_.SeekToLast();
   }
@@ -160,12 +169,24 @@ void TwoLevelIterator::InitDataBlock() {
   }
 }
 
-}  // namespace
-
 Iterator* NewTwoLevelIterator(Iterator* index_iter,
                               BlockFunction block_function, void* arg,
                               const ReadOptions& options) {
   return new TwoLevelIterator(index_iter, block_function, arg, options);
+}
+
+// 辅助函数：安全地获取 TwoLevelIterator 的当前 block index
+uint32_t GetCurrentBlockIndex(Iterator* iter) {
+  if (iter == nullptr) {
+    return 0;
+  }
+  // 尝试将 Iterator* 转换为 TwoLevelIterator*
+  // 注意：这个转换是安全的，因为我们知道 Table::NewVIterator 返回的是 TwoLevelIterator
+  TwoLevelIterator* two_level = dynamic_cast<TwoLevelIterator*>(iter);
+  if (two_level != nullptr) {
+    return two_level->CurrentBlockIndex();
+  }
+  return 0;  // 不是 TwoLevelIterator，返回 0
 }
 
 }  // namespace leveldb

@@ -280,7 +280,7 @@ class VMergingIterator : public Iterator {
         auto interval = region_.intervals_[cur_idx_[pos_]];
         if(sort_key > interval.end_) {
           JumpNext();
-        }
+      }
       } else if (!current_->Valid()) {
         // 不处理,findsmallest会自动跳过它
       }

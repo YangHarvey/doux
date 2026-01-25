@@ -26,6 +26,11 @@ Iterator* NewTwoLevelIterator(
                                 const Slice& index_value),
     void* arg, const ReadOptions& options);
 
+// Get the current block index from a TwoLevelIterator.
+// Returns 0 if the iterator is not a TwoLevelIterator or if it's invalid.
+// This function is safe to call on any Iterator*.
+uint32_t GetCurrentBlockIndex(Iterator* iter);
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_TABLE_TWO_LEVEL_ITERATOR_H_

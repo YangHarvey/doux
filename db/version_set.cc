@@ -1930,9 +1930,7 @@ Compaction* VersionSet::PickCompaction() {
 
 Compaction* VersionSet::PickVCompaction() {
   Compaction* c;
-  // Level compaction 触发条件：Level 0 文件数 >= 8 个
-  // 目的：将 Level 0 文件移动到 Level 1，减少 Level 0 文件重叠
-  const int kL0VFileCompactionTrigger = 8;
+  const int kL0VFileCompactionTrigger = 128;
   const bool level_compaction = (current_->vfiles_[0].size() >= kL0VFileCompactionTrigger);
   
   // Size compaction 触发条件：小文件数量过多

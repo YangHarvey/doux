@@ -410,6 +410,7 @@ if(LEVELDB_BUILD_TESTS)
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/ycsb_bench_2.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/doux_tst.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench.cc")
+    leveldb_test("${PROJECT_SOURCE_DIR}/impl/check_stats.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_2.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_bench_vary_value_size.cc")
     leveldb_test("${PROJECT_SOURCE_DIR}/impl/tpch_selectivity.cc")
@@ -534,3 +535,14 @@ if(LEVELDB_INSTALL)
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/leveldb"
   )
 endif(LEVELDB_INSTALL)
+
+# DependencyGraph 测试
+add_executable(dependency_test
+  impl/dependency_test.cc
+)
+
+target_link_libraries(dependency_test leveldb)
+target_include_directories(dependency_test PRIVATE
+  ${PROJECT_SOURCE_DIR}/include
+  ${PROJECT_SOURCE_DIR}
+)
