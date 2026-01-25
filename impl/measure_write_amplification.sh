@@ -211,13 +211,31 @@ if [ "$USE_STRACE" = true ] && [ -f "$STRACE_OUTPUT" ]; then
     # strace 格式: write(3, "data", 1024) = 1024
     # 或者: pwrite64(3, "data", 1024, 4096) = 1024
     # 或者: [pid 12345] write(3, "data", 1024) = 1024
+    # 或者: writev(3, [{iov_base="data", iov_len=1024}], 1) = 1024
     # 需要过滤掉错误返回值（负数）和特殊值（如 -1）
-    # 使用 printf "%d" 确保输出整数格式，避免科学计数法
-    TOTAL_BYTES_WRITTEN_STRACE=$(grep -E "write\(|pwrite|writev" "$STRACE_OUTPUT" | \
+    # 使用 bc 累加，避免 awk 的 32 位整数溢出问题
+    STRACE_TEMP=$(mktemp)
+    grep -E "write\(|pwrite|writev" "$STRACE_OUTPUT" | \
         grep -E "= [0-9]+$" | \
         grep -vE "= -[0-9]+$" | \
         sed -E 's/.*= ([0-9]+)$/\1/' | \
-        awk '{if ($1 > 0) sum += $1} END {printf "%d", sum+0}')
+        grep -E '^[0-9]+$' > "$STRACE_TEMP"
+    
+    # 使用 bc 累加所有数字，避免整数溢出
+    if [ -s "$STRACE_TEMP" ]; then
+        # 方法：将所有数字用 + 连接，最后加上 0，然后传给 bc
+        # 例如: echo "1+2+3+0" | bc
+        TOTAL_BYTES_WRITTEN_STRACE=$(paste -sd+ "$STRACE_TEMP" | sed 's/$/+0/' | bc)
+        # 确保输出是整数格式（去掉小数点）
+        if [ -n "$TOTAL_BYTES_WRITTEN_STRACE" ]; then
+            TOTAL_BYTES_WRITTEN_STRACE=$(echo "$TOTAL_BYTES_WRITTEN_STRACE" | awk '{printf "%.0f", $1}')
+        else
+            TOTAL_BYTES_WRITTEN_STRACE=0
+        fi
+    else
+        TOTAL_BYTES_WRITTEN_STRACE=0
+    fi
+    rm -f "$STRACE_TEMP"
     
     # 使用 bc 来比较，避免科学计数法问题
     if [ -n "$TOTAL_BYTES_WRITTEN_STRACE" ] && [ "$TOTAL_BYTES_WRITTEN_STRACE" != "0" ] && \
